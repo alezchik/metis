@@ -93,6 +93,13 @@
   `docs/adr/0012`, no algo que un conector de ingesta pueda resolver por su
   cuenta. Resolverlo de verdad implica autorizacion por usuario en el MCP/API
   server, todavia sin diseñar.
+- **La destilacion de reuniones no tiene ningun filtro de contenido
+  sensible/PII, y el "propio control de acceso" prometido para el store de
+  capturas crudas (seccion 14 de la especificacion) no esta implementado.**
+  Identificado en un analisis de seguridad cross-repo (Metis/Dedalo/Talos,
+  2026-09-09). No es una fuga activa -- la ingesta nunca corrio en
+  produccion todavia -- pero `docs/adr/0014` bloquea correr esto contra una
+  transcripcion real de un proyecto real hasta resolver ambos puntos.
 
 ## Proximo hito: un piloto real
 

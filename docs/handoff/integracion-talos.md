@@ -79,3 +79,13 @@ simplemente no tiene Metis desplegado todavia, y `AGENTS.md` queda como esta.
 `docs/design/spec-tecnica-funcional.md` (que es `AGENTS.md` del lado de Metis y por
 que existe: "que la base que consultan las personas sea la misma que ejecutan los
 agentes deje de ser un eslogan y sea un mecanismo").
+
+---
+
+## Nota de seguridad (`docs/adr/0014`)
+
+Este cambio en si no agrega una via nueva de exposicion (Talos solo linkea/incluye
+`AGENTS.md`, no ingiere contenido de Metis dinamicamente). El riesgo real de contenido
+sensible esta del lado de Metis (destilacion sin filtro) y, si se implementa, del lado
+del Cambio 1/2 de `integracion-dedalo.md` -- ver `docs/adr/0014` para el detalle.
+

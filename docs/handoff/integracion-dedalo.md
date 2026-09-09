@@ -176,3 +176,22 @@ solo lectura a proposito, ver `docs/adr/0006`). El propio repo `metis` tiene un
 ejemplo end-to-end de esto en `tests/test-write-agent.py` (arma un Context Base
 descartable, llama `propose_decision`, simula el merge con git real, verifica que la
 decision queda `confirmed`).
+
+---
+
+## Nota de seguridad -- contenido sensible (`docs/adr/0014`)
+
+Ninguno de los dos cambios de este documento agrega codigo nuevo del lado de Metis,
+pero ambos mueven contenido que puede citar informacion sensible/PII un paso mas
+lejos de donde hoy vive (ver `docs/adr/0014`, sin resolver todavia del lado de Metis):
+
+- **Cambio 1** (`search_knowledge` en el Investigator): no asumir que todo lo que
+  devuelve Metis es seguro de citar textualmente en un finding o, mas adelante, en un
+  ticket, solo porque ya paso por un PR humano en Metis. Aplicar la misma disciplina
+  de "cita minima, nunca el arbol completo" que Dedalo ya usa para su propia
+  `evidence.jsonl`.
+- **Cambio 2** (`propose_decision` desde Gate D): agregar al checkbox existente una
+  pregunta explicita -- "esta decision que estas promoviendo a memoria permanente
+  cita informacion personal de alguien?" -- barato de agregar porque es el mismo gate
+  humano que ya existe, no un mecanismo nuevo.
+

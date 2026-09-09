@@ -49,3 +49,4 @@ nada mas, a `superseded by ADR-NNNN`.
 | [0011](0011-fase5-lado-metis-ya-completo.md) | Fase 5: el lado de Metis del contrato de frontera ya esta completo |
 | [0012](0012-alcance-explicito-conectores-credencial-compartida.md) | Alcance explicito obligatorio en conectores sobre credenciales compartidas |
 | [0013](0013-no-se-construye-conector-notion.md) | No se construye el conector de Notion, pese a contar con credenciales reales |
+| [0014](0014-riesgo-contenido-sensible-ingesta.md) | La ingesta de reuniones no corre contra datos reales sin control de contenido sensible |

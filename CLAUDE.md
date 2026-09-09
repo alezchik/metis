@@ -90,6 +90,12 @@ primeras no se aflojan nunca sin un ADR nuevo que lo justifique explicitamente; 
 segundas pueden evolucionar si el contrato de `schemas/ingestion-candidate.schema.json`
 tambien cambia en el mismo PR.
 
+Una regla de contenido sensible/PII tiene, hoy, el mismo estatus que las reglas de
+seguridad de arriba, aunque todavia no exista como codigo: `docs/adr/0014` bloquea
+correr este skill contra una transcripcion real hasta que la seccion "Diet" tenga
+una regla explicita de datos personales/sensibles (con el mismo criterio de "frenar
+la corrida" que ya usa `security_findings`, nunca "aflojar para un caso particular").
+
 ## Donde vive el razonamiento de diseño
 
 `docs/design/spec-tecnica-funcional.md` es la referencia generica -- principios no

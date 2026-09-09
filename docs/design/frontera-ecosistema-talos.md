@@ -152,3 +152,21 @@ Talos  ── ticket → PR revisable con verificación mecánica
 
 Tres repos, tres ciclos de vida distintos, un solo hilo conductor: nada se autocertifica, todo lo que
 entra por IA se propone y un humano confirma, y lo que es verdad vive siempre del lado del cliente.
+
+---
+
+## 7. Confidencialidad y datos sensibles en el traspaso (`docs/adr/0014`)
+
+Ninguna de las secciones anteriores distingue sensibilidad: `search_knowledge()` devuelve lo que haya,
+`propose_decision()` publica lo que el aprobador marque, y ninguno de los dos formatos de payload
+tiene un campo de sensibilidad. Esto es intencional -- Metis no decide por su cuenta que es sensible,
+eso sigue siendo criterio humano -- pero significa que un dato personal que haya entrado a Context
+Base sin filtro (ver `docs/adr/0014`, del lado de la ingesta de Metis) se propaga sin friccion
+adicional a traves de esta misma frontera: al Investigator de Dedalo via `search_knowledge()`, y de
+ahi, potencialmente, a un ticket publicado en el tracker real del cliente via Talos -- una audiencia
+mas amplia que la de Metis y sin una ruta de borrado tan simple como revertir un commit.
+
+Mientras `docs/adr/0014` no este resuelto del lado de Metis, quien implemente el Cambio 1/2 de la
+seccion 2.1/3 deberia aplicar la misma disciplina de "cita minima, nunca el contenido completo" que
+Dedalo ya usa para su propia `evidence.jsonl`, en vez de asumir que todo lo que atraveso un PR humano
+en Metis es automaticamente seguro de citar textualmente un paso mas adelante en la cadena.
