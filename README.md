@@ -35,7 +35,10 @@ real (`docs/adr/0009`) -- una segunda reunion que contradice una decision `confi
 ya marca esa entrada `disputed`, citando ambas fuentes. Conectores de
 Confluence/Notion/mail y la web app quedan explicitamente afuera de esta corrida
 (`docs/adr/0010`) -- ver criterios de salida en `docs/design/spec-tecnica-funcional.md`
-seccion 10.
+seccion 10. **Fase 5, lado de Metis: completo sin trabajo adicional** -- el contrato
+de frontera con Dedalo/Talos (`docs/design/frontera-ecosistema-talos.md`) ya lo
+satisfacen integramente las operaciones de Fase 1/2 (`docs/adr/0011`); lo que falta
+de esa integracion vive del lado de los repos `talosprd`/`talos`, no de este.
 
 ## Estructura del repo
 
