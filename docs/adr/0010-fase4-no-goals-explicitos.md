@@ -1,7 +1,7 @@
 # ADR 0010 -- No-goals explicitos de Fase 4: conectores de Confluence/Notion/mail y web app
 
 Fecha: 2026-09-09
-Estado: aceptada
+Estado: aceptada (punto 2 de la Decision, Web app, superseded por `docs/adr/0017` -- se elimina del alcance del producto, no solo se difiere; el punto 1, conectores de Confluence/Notion/mail, sigue vigente sin cambios)
 
 ## Contexto
 

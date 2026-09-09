@@ -99,8 +99,8 @@ la corrida" que ya usa `security_findings`, nunca "aflojar para un caso particul
 ## Donde vive el razonamiento de diseño
 
 `docs/design/spec-tecnica-funcional.md` es la referencia generica -- principios no
-negociables, arquitectura, pipeline de ingesta, contrato de las cuatro entradas,
-plan de fases. Decisiones estructurales individuales (por que dedup/match de Fase 3
+negociables, arquitectura, pipeline de ingesta, contrato de las entradas (MCP/API,
+`docs/adr/0017`), plan de fases. Decisiones estructurales individuales (por que dedup/match de Fase 3
 no toca contradiccion, por que el status de una propuesta de ingesta es siempre
 `proposed`, etc.) tienen cada una su propio archivo en `docs/adr/` -- si una
 decision de diseño en este repo parece no tener motivo, buscar ahi primero.

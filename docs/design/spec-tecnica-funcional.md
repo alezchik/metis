@@ -26,8 +26,9 @@ Son dos servicios sobre una sola fuente de verdad:
 - **Context Base** — el repo Git del cliente. Markdown, nada más. Vive con el cliente desde el día 1
   y se queda con él cuando termina el contrato.
 - **Context Assistant** — el agente hosteado por nosotros que hace esa base consultable y editable:
-  web chat, Slack, MCP server, API REST, más la ingesta que la alimenta desde mails, reuniones y
-  documentos. Es descartable: se reconstruye entero desde el repo.
+  MCP server, API REST, más la ingesta que la alimenta desde mails, reuniones y documentos (`docs/adr/
+  0017` -- solo estas dos entradas, Slack app y web app quedan fuera de alcance). Es descartable: se
+  reconstruye entero desde el repo.
 
 Esta especificación cubre ambos, más el contrato de frontera con Talos y Dédalo (sección 11) y el
 plan de construcción (sección 10).
@@ -44,7 +45,7 @@ es el mismo principio aplicado a un dominio distinto, no una coincidencia.
    cliente. Si el contrato se corta, el cliente pierde automatización, nunca conocimiento. *(Es el mismo
    principio que separa judgment de certification en Talos, y que hace que Dédalo nunca guarde
    credenciales propias.)*
-2. **Se propone, nunca se edita.** Todo lo que entra por ingesta o por una persona vía chat/Slack/MCP
+2. **Se propone, nunca se edita.** Todo lo que entra por ingesta o por una persona vía MCP/API
    es una **propuesta** (un PR abierto contra el repo del cliente). Solo una persona **confirma**
    (mergea). Una inferencia de un modelo nunca se convierte en verdad oficial sin que alguien lo haya
    decidido. *(Idéntico al dry-run + aprobación humana de Dédalo Gate D, y a `guard.sh` en Talos.)*
@@ -117,7 +118,7 @@ Toda escritura, sin excepción, pasa por el flujo de propuesta/confirmación de 
 |  |     Índice semántico (DB derivada, reconstruible)   | |          |
 |  +----------------------------------------------------+ |          |
 |                                                        |          |
-|  Entradas: Web app · Slack app · MCP server · API REST |          |
+|  Entradas: MCP server · API REST                       |          |
 +---------------------+----------------------------------+          |
                        | lee                | propone (PR)          |
                        v                    v                       v
@@ -136,8 +137,9 @@ Cuatro bloques, cada uno con una responsabilidad y ningún solapamiento:
   directa.
 - **Índice semántico** — derivado, reconstruible enteramente desde Context Base en cualquier momento.
   No guarda nada que no pueda reconstruirse.
-- **Entradas (web, Slack, MCP, API)** — la misma capa de query/write detrás de las cuatro, para que la
-  respuesta sea idéntica sin importar por dónde se pregunte.
+- **Entradas (MCP, API)** — la misma capa de query/write detrás de las dos (`docs/adr/0017` retira
+  Slack app y web app del alcance), para que la respuesta sea idéntica sin importar por dónde se
+  pregunte.
 
 ---
 
@@ -280,7 +282,7 @@ pre-optimizar ahora sacrificando el aislamiento.
 
 ### 5.2 Componentes
 
-**Query Agent.** Recibe una pregunta en lenguaje natural (de cualquier entrada — web, Slack, MCP, API),
+**Query Agent.** Recibe una pregunta en lenguaje natural (de cualquier entrada — MCP, API),
 retrieval contra el índice semántico, sintetiza una respuesta citando archivo + sección + commit (o,
 para algo todavía no confirmado en el repo, la fuente de ingesta con su locator). Si no hay evidencia
 suficiente, responde "no está documentado" — nunca completa con una inferencia no marcada como tal.
@@ -303,18 +305,17 @@ día. Se puede borrar la base de índice entera y reconstruirla desde cero sin p
 
 ### 5.3 Entradas expuestas
 
-Las cuatro que ya nombra el borrador, sin cambios de alcance, con el contrato técnico bajado:
+El borrador original nombraba cuatro; quedan dos (`docs/adr/0017` retira Slack app y web app del
+alcance del producto, no solo las difiere), con el contrato técnico bajado:
 
 | Entrada | Para quién | Soporta lectura | Soporta escritura |
 |---|---|---|---|
-| Web app | Personas no técnicas, cliente | Sí | Sí (conversacional) |
-| Slack app | Equipo del proyecto | Sí | Sí (conversacional, en canal o DM) |
 | MCP server | Cualquier IA (Claude, Cursor, harness) | Sí | Sí (vía tool call, mismo flujo de propuesta) |
 | API REST | Automatizaciones del cliente | Sí | Sí (mismo flujo, para integraciones propias) |
 
-Las cuatro comparten el mismo Query Agent y el mismo Write Agent por debajo — nunca hay una respuesta
-distinta según por dónde se pregunte lo mismo, porque no hay cuatro implementaciones, hay una lógica y
-cuatro transportes.
+Las dos comparten el mismo Query Agent y el mismo Write Agent por debajo — nunca hay una respuesta
+distinta según por dónde se pregunte lo mismo, porque no hay dos implementaciones, hay una lógica y
+dos transportes.
 
 ---
 
@@ -407,7 +408,7 @@ contra la fuente — regla 5 de `adapters/ingestion/CONTRACT.md`, razonada en `d
 
 ---
 
-## 8. Contrato de las cuatro entradas (MCP, API, Slack, Web)
+## 8. Contrato de las dos entradas (MCP, API)
 
 El contrato angosto que expone Context Assistant, pensado para que cualquier IA (no solo Claude) lo use
 como herramienta — mismo espíritu que `providers/CONTRACT.md` de Talos.
@@ -431,18 +432,8 @@ Seis operaciones, ningún verbo que borre ni que mergee — igual que el contrat
 Espejo delgado de las mismas seis operaciones, para automatizaciones del cliente que no hablan MCP.
 Autenticación por API key emitida por proyecto (nunca compartida entre clientes, consistente con §5.1).
 
-### 8.3 Slack app
-
-Responde en canal o DM. Una mención (`@metis ¿qué se decidió sobre X?`) dispara Query Agent; un
-`/registrar-decision` o una frase reconocida como intención de escritura dispara Write Agent. El PR
-resultante se linkea de vuelta en el hilo de Slack para que quede trazable desde la propia conversación
-que lo originó.
-
-### 8.4 Web app
-
-La interfaz para quien no usa ni Slack ni un cliente MCP — chat simple + una vista de solo lectura de
-Context Base navegable (decisiones, requisitos, riesgos, sistemas) para quien prefiere explorar en vez
-de preguntar.
+**Nota (`docs/adr/0017`).** El borrador original también nombraba un Slack app y una web app como
+entradas 8.3/8.4 -- ninguna de las dos entra al alcance del producto. Ver ese ADR para el porqué.
 
 ---
 
@@ -456,7 +447,7 @@ documento sea autosuficiente:
 | Estado, decisiones, requisitos, riesgos | Context Base | **Cliente** | Es su activo. Vive en su infra desde el día 1, no migra al final |
 | Harness de agentes que la consume | Context Base | **Cliente** | Se entrega junto con el proyecto |
 | Ingesta (mails, reuniones, transcripts, Confluence) | Context Assistant | **Nuestro** | Conectores, credenciales, mantenimiento y consumo |
-| Chat web, Slack, MCP/API | Context Assistant | **Nuestro** | Consumo de LLM, hosting, evolución del producto |
+| MCP/API | Context Assistant | **Nuestro** | Consumo de LLM, hosting, evolución del producto |
 | Índice semántico | Context Assistant | **Nuestro** | Es derivado: se reconstruye desde la base del cliente |
 
 ---
@@ -489,8 +480,8 @@ cita verificable, contra contenido escrito enteramente a mano.*
 ### Fase 2 — Escritura conversacional, sin ingesta automática
 
 - Write Agent: `propose_decision`/`propose_update`, con el flujo de PR completo.
-- Una entrada (Slack o web, la que sea más rápida de prototipar) para disparar el flujo
-  conversacionalmente.
+- La misma entrada MCP ya construida en Fase 1, reusada para disparar el flujo conversacionalmente
+  (`docs/adr/0005`) -- nunca un Slack/web nuevo (`docs/adr/0017` retira ambos del alcance).
 
 *Criterio de salida: una persona le dice al asistente "registrá esta decisión", el asistente abre un
 PR bien formado, un humano lo mergea, y una pregunta posterior ya devuelve esa decisión como `confirmed`
@@ -511,7 +502,7 @@ literal.*
 ### Fase 4 — Más fuentes, más entradas, superseding
 
 - Conectores de Confluence/Notion y mail.
-- Web app y API REST completas.
+- API REST completa.
 - Flujo de superseding activado (marcar una decisión como reemplazada, vía chat o vía ingesta que
   detecta contradicción con una entrada `confirmed`).
 - Estado `disputed` ejercitado con un caso real de fuentes contradictorias.

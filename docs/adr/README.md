@@ -52,3 +52,4 @@ nada mas, a `superseded by ADR-NNNN`.
 | [0014](0014-riesgo-contenido-sensible-ingesta.md) | La ingesta de reuniones no corre contra datos reales sin control de contenido sensible |
 | [0015](0015-conectores-documentos-sin-persistencia-de-crudo.md) | Conectores de documentos (docs/PDF/Excel/imagenes): video fuera de alcance, falla de extraccion explicita, sin persistencia del crudo |
 | [0016](0016-auditoria-brechas-tracker-codigo-en-vivo.md) | Auditoria de brechas: Metis lee tracker y codigo en vivo, nunca cachea su estado, funciona sin Dedalo/Talos |
+| [0017](0017-elimina-slack-app-y-web-app.md) | Se elimina del alcance el Slack app y la web app: quedan dos entradas, no cuatro (MCP + API REST) |

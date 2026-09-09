@@ -17,8 +17,8 @@ contribucion y `ROADMAP.md` para el estado y los huecos conocidos.
 
 - [`docs/design/spec-tecnica-funcional.md`](docs/design/spec-tecnica-funcional.md) --
   fuente de verdad de diseno: arquitectura, schemas, pipeline de ingesta, contrato de
-  las cuatro entradas (MCP/API/Slack/Web), plan de fases. Leer esto antes de cambiar
-  algo estructural.
+  las entradas (MCP/API -- Slack app y web app quedan fuera de alcance, `docs/adr/0017`),
+  plan de fases. Leer esto antes de cambiar algo estructural.
 - [`docs/design/frontera-ecosistema-talos.md`](docs/design/frontera-ecosistema-talos.md)
   -- contrato de integracion con Dedalo/Talos (Fase 5).
 - [`docs/design/primeros-pasos.md`](docs/design/primeros-pasos.md) -- guia operativa de
@@ -48,9 +48,9 @@ dedup/match -> propuesta. Fase 4: la logica de Query/Write Agent se extrajo a
 REST nuevo (seccion 8.2); el flujo de superseding/`disputed` se activo desde ingesta
 real (`docs/adr/0009`) -- una segunda reunion que contradice una decision `confirmed`
 ya marca esa entrada `disputed`, citando ambas fuentes. Conectores de
-Confluence/Notion/mail y la web app quedan explicitamente afuera de esta corrida
-(`docs/adr/0010`) -- ver criterios de salida en `docs/design/spec-tecnica-funcional.md`
-seccion 10. **Fase 5, lado de Metis: completo sin trabajo adicional** -- el contrato
+Confluence/Notion/mail quedan diferidos (`docs/adr/0010`) -- ver criterios de salida en
+`docs/design/spec-tecnica-funcional.md` seccion 10. Slack app y web app quedan fuera de
+alcance del producto, no solo diferidas (`docs/adr/0017`). **Fase 5, lado de Metis: completo sin trabajo adicional** -- el contrato
 de frontera con Dedalo/Talos (`docs/design/frontera-ecosistema-talos.md`) ya lo
 satisfacen integramente las operaciones de Fase 1/2 (`docs/adr/0011`); lo que falta
 de esa integracion vive del lado de los repos `talosprd`/`talos`, no de este.

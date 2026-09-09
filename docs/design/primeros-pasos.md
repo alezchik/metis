@@ -7,7 +7,7 @@ repositorio recién creado, vacío, para arrancar la Fase 0.
 Los otros dos documentos de esta serie:
 
 - `metis-spec-tecnica-funcional.md` — la especificación completa (arquitectura, schemas,
-  pipeline de ingesta, contrato de las cuatro entradas, plan de fases). Es la fuente de verdad de
+  pipeline de ingesta, contrato de las entradas (MCP/API), plan de fases). Es la fuente de verdad de
   diseño; este archivo no repite su contenido, solo lo secuencia en tareas.
 - `metis-frontera-ecosistema-talos.md` — el contrato con Talos/Dédalo. No hace falta para
   arrancar Fase 0-2, sí antes de tocar Fase 5.

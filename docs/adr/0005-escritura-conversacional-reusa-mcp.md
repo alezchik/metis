@@ -1,7 +1,7 @@
 # ADR 0005 -- La "entrada conversacional" de Fase 2 reutiliza el MCP server, no Slack/web nuevo
 
 Fecha: 2026-09-09
-Estado: aceptada
+Estado: aceptada (la mencion a Slack/web como "transportes alternativos pendientes" quedo desactualizada por `docs/adr/0017` -- se eliminan del alcance del producto, no quedan pendientes; el resto de esta decision, reusar MCP para Fase 2, sigue vigente)
 
 ## Contexto
 

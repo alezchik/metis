@@ -39,8 +39,9 @@
   El flujo de superseding/`disputed` se activo desde ingesta real (`docs/adr/0009`)
   -- una segunda reunion que contradice una decision `confirmed` marca esa entrada
   `disputed`, citando ambas fuentes (`fixtures/ingestion/2026-09-22-followup.*`).
-  Conectores de Confluence/Notion/mail y la web app quedan explicitamente afuera
-  (`docs/adr/0010`) -- ver "Huecos conocidos" abajo. Probado
+  Conectores de Confluence/Notion/mail quedan diferidos (`docs/adr/0010`) -- ver
+  "Huecos conocidos" abajo. Slack app y web app quedan fuera de alcance del producto,
+  no solo diferidas (`docs/adr/0017`). Probado
   (`tests/test-api-server.sh`, ampliacion de `tests/test-ingestion.sh`).
 - **Fase 5, lado de Metis -- completo sin trabajo adicional.** El contrato de
   frontera con Dedalo/Talos (`docs/design/frontera-ecosistema-talos.md`, secciones
@@ -77,10 +78,9 @@
   Context Base grande de verdad; si se agrega cache, tiene que invalidar de forma
   que nunca sirva algo mas viejo que el HEAD real (romperia "derivado,
   reconstruible").
-- **Conectores de Confluence/Notion/mail y la web app** -- diferidos
-  explicitamente (`docs/adr/0010`): sin credenciales de una API real ni un piloto
-  concreto contra el cual construirlos y probarlos (salvo Notion, ver abajo), y
-  sin decision de producto tomada sobre la web app.
+- **Conectores de Confluence/Notion/mail** -- diferidos explicitamente
+  (`docs/adr/0010`): sin credenciales de una API real ni un piloto concreto contra
+  el cual construirlos y probarlos (salvo Notion, ver abajo).
 - **Conector de Notion, puntualmente** -- a diferencia de Confluence/mail, aca si
   hubo credenciales reales disponibles para probarlo, pero se decidio no
   construirlo de todas formas (`docs/adr/0013`): el riesgo de alcance de
