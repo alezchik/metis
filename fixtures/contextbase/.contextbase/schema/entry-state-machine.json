@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://metis.xmartlabs.com/schemas/entry-state-machine.json",
+  "description": "Maquina de estados de una entrada de Context Base, como dato (no logica enterrada en un script). Ver docs/design/spec-tecnica-funcional.md seccion 4.3.",
+  "states": ["proposed", "confirmed", "superseded", "discarded", "disputed"],
+  "initial": "proposed",
+  "terminal": ["superseded", "discarded"],
+  "transitions": [
+    {
+      "from": "proposed",
+      "to": "confirmed",
+      "trigger": "human_merges_pr",
+      "description": "Un humano mergea el PR que proponia la entrada."
+    },
+    {
+      "from": "proposed",
+      "to": "discarded",
+      "trigger": "human_closes_pr",
+      "description": "Un humano cierra el PR sin mergear."
+    },
+    {
+      "from": "confirmed",
+      "to": "superseded",
+      "trigger": "new_entry_replaces",
+      "description": "Una nueva entrada confirmada reemplaza a esta (via supersedes/superseded_by)."
+    },
+    {
+      "from": "confirmed",
+      "to": "disputed",
+      "trigger": "conflicting_source_found",
+      "description": "Dos fuentes no coinciden y ninguna automatizacion decide cual vale; se abre como pregunta para un humano."
+    },
+    {
+      "from": "disputed",
+      "to": "confirmed",
+      "trigger": "human_resolves_conflict",
+      "description": "Un humano revisa ambas fuentes citadas y confirma cual version vale."
+    },
+    {
+      "from": "disputed",
+      "to": "discarded",
+      "trigger": "human_discards",
+      "description": "Un humano determina que ninguna version en disputa debe quedar como entrada valida."
+    }
+  ]
+}

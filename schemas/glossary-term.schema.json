@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://metis.xmartlabs.com/schemas/glossary-term.schema.json",
+  "title": "Glossary term entry frontmatter",
+  "description": "Frontmatter de una entrada knowledge/glossary/*.md. Ver docs/adr/0001-glossary-como-directorio.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "status", "term", "date"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^TERM-[a-z0-9-]+$" },
+    "type": { "const": "glossary-term" },
+    "status": { "type": "string", "enum": ["proposed", "confirmed", "superseded", "discarded", "disputed"] },
+    "term": { "type": "string", "minLength": 1 },
+    "date": { "type": "string", "format": "date" },
+    "aliases": { "type": "array", "items": { "type": "string" } },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "ref"],
+        "properties": {
+          "source": { "type": "string", "enum": ["meeting", "slack", "mail", "confluence", "notion", "document", "code", "manual"] },
+          "ref": { "type": "string", "minLength": 1 },
+          "locator": { "type": "string" }
+        }
+      }
+    },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "confidence": { "type": "string", "enum": ["FACT", "INFERENCE", "UNKNOWN", "CONFLICT"] }
+  }
+}

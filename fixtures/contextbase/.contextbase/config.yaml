@@ -1,0 +1,8 @@
+# Config de este Context Base de ejemplo (fixtures/contextbase).
+mode: standalone
+project:
+  name: "cliente-ejemplo"
+  tracker: "file"
+ingestion:
+  sources: []
+  confidence_threshold: 0.6
