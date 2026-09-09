@@ -58,6 +58,15 @@ siempre devuelve el mismo `RawCapture`:
 4. **`capture_id` estable.** El mismo contenido de la misma fuente debe producir el
    mismo `capture_id` (o poder deduplicarse por `content_hash`) para que correr el
    conector dos veces sobre lo mismo no duplique capturas ni, mas adelante, PRs.
+5. **Alcance explicito, nunca busqueda/descubrimiento (`docs/adr/0012`).** Si la fuente
+   se administra con una credencial que puede alcanzar contenido de mas de un
+   proyecto/workspace (una integracion de Notion, un espacio de Confluence, una
+   casilla de mail), el conector recibe los identificadores de recurso a leer como
+   argumento explicito de `fetch_raw(...)` -- nunca implementa ni usa una operacion
+   de tipo `search`/listado contra la fuente para decidir por su cuenta que traer.
+   Metis no distingue accesos por usuario en su propio lado de lectura (MCP/API):
+   cualquier contenido de mas que entre por un conector queda expuesto a todo el
+   que tenga acceso a ese deployment, no acotado a quien disparo la ingesta.
 
 ## Conectores implementados
 

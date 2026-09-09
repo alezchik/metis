@@ -77,10 +77,19 @@
   Context Base grande de verdad; si se agrega cache, tiene que invalidar de forma
   que nunca sirva algo mas viejo que el HEAD real (romperia "derivado,
   reconstruible").
-- **Conectores de Confluence/Notion/mail y la web app** -- diferidos
-  explicitamente (`docs/adr/0010`): sin credenciales de una API real ni un piloto
-  concreto contra el cual construirlos y probarlos, y sin decision de producto
-  tomada sobre la web app.
+- **Conectores de Confluence/mail y la web app** -- diferidos explicitamente
+  (`docs/adr/0010`): sin credenciales de una API real ni un piloto concreto contra
+  el cual construirlos y probarlos, y sin decision de producto tomada sobre la web
+  app. El conector de Notion salio de este grupo (hay credenciales reales
+  disponibles) pero su construccion queda condicionada a la regla de alcance
+  explicito de `docs/adr/0012` -- nunca busqueda/descubrimiento contra la
+  integracion, solo paginas indicadas a mano.
+- **Metis no distingue accesos por usuario en su propio lado de lectura
+  (MCP/API).** Todo lo que entra a Context Base queda visible a cualquiera con
+  acceso a ese deployment, sin niveles internos -- limitacion de fondo detras de
+  `docs/adr/0012`, no algo que un conector de ingesta pueda resolver por su
+  cuenta. Resolverlo de verdad implica autorizacion por usuario en el MCP/API
+  server, todavia sin diseñar.
 
 ## Proximo hito: un piloto real
 

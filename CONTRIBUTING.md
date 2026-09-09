@@ -63,6 +63,15 @@ y `adapters/ingestion/meeting_file.py` como referencia. `lib/ingestion.py` nunca
 deberia necesitar saber que tipo de conector le trajo una captura -- ese es el
 punto del contrato.
 
+Si la fuente se administra con una credencial que puede alcanzar contenido de mas
+de un proyecto (Notion, Confluence, una casilla de mail corporativa), el conector
+**nunca** hace busqueda/descubrimiento contra la fuente -- recibe los
+identificadores de recurso a leer como argumento explicito, siempre provistos por
+un humano desde afuera del conector (`docs/adr/0012`, regla 5 de
+`adapters/ingestion/CONTRACT.md`). Esto no es opcional ni queda a criterio de quien
+lo escribe: Metis no distingue por usuario en su propio lado de lectura, asi que
+cualquier alcance de mas del lado de la fuente termina expuesto a todo el equipo.
+
 ## Agregar un tipo de entrada nuevo (mas alla de decision/requirement/risk)
 
 Hoy solo `decision`, `requirement` y `risk` tienen flujo de propuesta (via

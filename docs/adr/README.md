@@ -47,3 +47,4 @@ nada mas, a `superseded by ADR-NNNN`.
 | [0009](0009-contradiccion-activada-en-fase4.md) | Fase 4 activa `contradicts_id`: disputed via ingesta real |
 | [0010](0010-fase4-no-goals-explicitos.md) | No-goals explicitos de Fase 4: conectores de Confluence/Notion/mail y web app |
 | [0011](0011-fase5-lado-metis-ya-completo.md) | Fase 5: el lado de Metis del contrato de frontera ya esta completo |
+| [0012](0012-alcance-explicito-conectores-credencial-compartida.md) | Alcance explicito obligatorio en conectores sobre credenciales compartidas |

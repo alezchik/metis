@@ -388,6 +388,14 @@ Regla, calcada del contrato de providers de Talos y aplicada a cada conector:
   real puede contener una instrucción inyectada sin que el remitente lo sepa (una firma comprometida, un
   reenvío de algo que alguien más escribió).
 
+Alcance también es seguridad, no solo contenido: un conector puede traer texto perfectamente benigno y
+aun así filtrar información entre proyectos, si la credencial que usa alcanza más de lo que este
+deployment de Metis debería ver. Metis no distingue accesos por usuario en su propio lado de lectura
+(MCP/API, sección 8) — todo lo que entra a Context Base queda expuesto a cualquiera con acceso a ese
+deployment. Por eso todo conector sobre una fuente de credencial compartida entre proyectos (Notion,
+Confluence, mail) opera solo sobre identificadores de recurso explícitos, nunca por búsqueda/descubrimiento
+contra la fuente — regla 5 de `adapters/ingestion/CONTRACT.md`, razonada en `docs/adr/0012`.
+
 ---
 
 ## 8. Contrato de las cuatro entradas (MCP, API, Slack, Web)
