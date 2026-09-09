@@ -9,17 +9,32 @@ Parte del mismo ecosistema que **Dedalo** (idea -> ticket) y **Talos** (ticket -
 verificado mecanicamente). Metis no genera tickets ni PRs de codigo: es la capa de
 contexto que los otros dos pueden leer y, opcionalmente, escribir.
 
-## Documentacion de diseno
+Pensado para que cualquiera lo clone y lo mejore para su propio proyecto, o le sume
+una fase que todavia no esta construida -- ver `CONTRIBUTING.md` para el proceso de
+contribucion y `ROADMAP.md` para el estado y los huecos conocidos.
+
+## Documentacion
 
 - [`docs/design/spec-tecnica-funcional.md`](docs/design/spec-tecnica-funcional.md) --
   fuente de verdad de diseno: arquitectura, schemas, pipeline de ingesta, contrato de
-  las cuatro entradas (MCP/API/Slack/Web), plan de fases.
+  las cuatro entradas (MCP/API/Slack/Web), plan de fases. Leer esto antes de cambiar
+  algo estructural.
 - [`docs/design/frontera-ecosistema-talos.md`](docs/design/frontera-ecosistema-talos.md)
   -- contrato de integracion con Dedalo/Talos (Fase 5).
 - [`docs/design/primeros-pasos.md`](docs/design/primeros-pasos.md) -- guia operativa de
   arranque de Fase 0 (este documento es la puerta de entrada practica).
-- [`docs/adr/`](docs/adr/) -- decisiones de arquitectura tomadas durante la
-  construccion, que no estaban ya resueltas en la especificacion.
+- [`docs/adr/`](docs/adr/) -- una decision de arquitectura por archivo, que un futuro
+  contribuidor no deberia deshacer casualmente sin saber por que se tomo asi. Ver
+  `docs/adr/README.md` para el indice y el proceso para agregar una.
+- [`docs/handoff/`](docs/handoff/) -- que falta del lado de `talosprd` (Dedalo) y
+  `talos` para completar la integracion de Fase 5 (documentado, no implementado en
+  este repo).
+- [`ROADMAP.md`](ROADMAP.md) -- que esta hecho, huecos conocidos que no bloquean
+  nada hoy, y el proximo hito.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) -- como proponer un cambio, y cuando hace
+  falta un ADR.
+- [`CLAUDE.md`](CLAUDE.md) -- reglas fijas y gotchas operativos para quien (persona
+  o agente) vaya a tocar este repo.
 
 ## Estado
 
