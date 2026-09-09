@@ -23,11 +23,12 @@ contexto que los otros dos pueden leer y, opcionalmente, escribir.
 
 ## Estado
 
-**Fase 0 y Fase 1 completas.** Fase 0: los seis schemas + validador + fixtures (ver
-criterio de salida en `docs/design/primeros-pasos.md` seccion 2). Fase 1: indice
-lexical + MCP server de solo lectura (ver criterio de salida en
-`docs/design/spec-tecnica-funcional.md` seccion 10). Sin ingesta ni Write Agent
-todavia: eso arranca en Fase 2/3.
+**Fase 0, 1 y 2 completas.** Fase 0: los seis schemas + validador + fixtures. Fase 1:
+indice lexical + MCP server de solo lectura. Fase 2: Write Agent
+(`propose_decision`/`propose_update`) + flujo de PR completo, disparado
+conversacionalmente via el mismo MCP server (ver criterios de salida en
+`docs/design/spec-tecnica-funcional.md` seccion 10). Sin ingesta automatica todavia:
+eso arranca en Fase 3.
 
 ## Estructura del repo
 
@@ -41,15 +42,22 @@ scripts/
 lib/
   validate_frontmatter.py  nucleo deterministico: YAML frontmatter + JSON Schema
   index.py                 indice lexical derivado + retrieval + get-by-id (Fase 1)
+  state_machine.py          lee entry-state-machine.json, valida transiciones
+  write_agent.py            Write Agent: redacta, valida y propone (Fase 2)
 context_assistant/
-  mcp_server.py            servidor MCP: search_knowledge, get_decision,
-                           get_requirement, list_open_questions (seccion 8.1)
+  mcp_server.py            servidor MCP: las 6 operaciones de la seccion 8.1
+                           (4 de lectura + propose_decision/propose_update)
+adapters/
+  CONTRACT.md              contrato del GitProvider que usa el Write Agent
+  git_provider.py          rama + commit + PR (o su degradacion, ver docs/adr/0006)
 fixtures/
   contextbase/       un Context Base "de mentira" completo, para probar sin cliente real
 tests/
-  test-validate-entries.sh    Fase 0: un archivo bien formado pasa, uno mal formado falla
-  test-context-assistant.sh   Fase 1: retrieval/get/list_open_questions contra el fixture
-  test-mcp-protocol.sh        Fase 1: las cuatro operaciones via el protocolo MCP real (stdio)
+  test-validate-entries.sh      Fase 0: un archivo bien formado pasa, uno mal formado falla
+  test-context-assistant.sh     Fase 1: retrieval/get/list_open_questions contra el fixture
+  test-mcp-protocol.sh          Fase 1: las 4 operaciones de lectura via MCP real (stdio)
+  test-write-agent.sh           Fase 2: propose_decision/propose_update + merge simulado
+  test-mcp-write-protocol.sh    Fase 2: propose_decision via MCP real + el guard de escritura
 docs/
   design/            los tres documentos de diseno (fuente de verdad)
   adr/               decisiones de arquitectura tomadas durante la construccion
@@ -111,12 +119,40 @@ Expone `search_knowledge(query, type?)`, `get_decision(id)`, `get_requirement(id
 (ver `docs/adr/0003-preguntas-abiertas-son-disputed.md`). Cero operaciones de
 escritura todavia: eso es el Write Agent de Fase 2.
 
+## Write Agent (Fase 2 -- seccion 5.2/8.1/2)
+
+Las mismas cuatro tools de lectura de Fase 1, mas dos de escritura, expuestas por el
+mismo `scripts/mcp-serve.sh`:
+
+- `propose_decision(payload)` -- registra una decision nueva. `payload` necesita
+  `title`, `evidence` (lista, minimo 1 cita), `confidence`, `requested_by`; `decided_by`
+  es opcional (si viene, el status por default es `confirmed`, si no `proposed` --
+  ver `docs/adr/0007`).
+- `propose_update(id, payload)` -- actualiza una entrada existente. `payload`
+  necesita `patch` (los campos a cambiar, ej. `{"status": "superseded",
+  "superseded_by": "DEC-0005"}`), `reason`, `requested_by`. Un cambio de `status` se
+  valida contra `schemas/entry-state-machine.json` -- una transicion no declarada se
+  rechaza antes de tocar git.
+
+Ninguna de las dos mergea ni escribe directo a la rama que estaba checked-out --
+siempre abren una rama nueva (`metis/<id>`) y, segun lo que haya disponible
+(credenciales de git, `gh` autenticado), abren un PR real, dejan la rama pusheada
+para que un humano abra el PR a mano, o dejan el commit solo en local con las
+instrucciones exactas para terminarlo (ver `docs/adr/0006`).
+
+**Salvaguarda:** si el server esta sirviendo el fixture de ejemplo por default (sin
+`--knowledge-dir`), ambas herramientas se rechazan con `{"error": "writes_disabled"}`
+-- `fixtures/contextbase` vive dentro de este mismo repo, y proponer contra el por
+accidente abriria una rama/PR real contra `alezchik/metis`.
+
 ## Correr los tests de este repo
 
 ```bash
 tests/test-validate-entries.sh       # Fase 0
 tests/test-context-assistant.sh      # Fase 1 -- nucleo de indice/retrieval
 tests/test-mcp-protocol.sh           # Fase 1 -- via el protocolo MCP real (stdio)
+tests/test-write-agent.sh            # Fase 2 -- propose_decision/propose_update + merge simulado
+tests/test-mcp-write-protocol.sh     # Fase 2 -- propose_decision via MCP real + el guard
 ```
 
 ## Principios (resumen; el detalle completo esta en la especificacion)
