@@ -40,6 +40,12 @@ siempre devuelve el mismo `RawCapture`:
   fuera de git"). Vive en el store de Context Assistant (`lib/ingestion.py:
   save_capture`), nunca en `knowledge/`.
 
+  **Nota para fuentes no puramente textuales (`docs/adr/0015`).** Para un conector que
+  extrae de un formato binario (PDF, `.docx`, hoja de calculo, imagen), `raw_text` es la
+  representacion textual extraida -- no una copia byte a byte de la fuente. Tiene que ser
+  una extraccion completa y fiel, nunca truncada ni resumida en silencio; si una parte no
+  se pudo extraer, ver la regla 6.
+
 ## Reglas (sin excepcion)
 
 1. **Solo lectura.** Ningun conector de ingesta escribe ni modifica nada en la fuente
@@ -67,6 +73,13 @@ siempre devuelve el mismo `RawCapture`:
    Metis no distingue accesos por usuario en su propio lado de lectura (MCP/API):
    cualquier contenido de mas que entre por un conector queda expuesto a todo el
    que tenga acceso a ese deployment, no acotado a quien disparo la ingesta.
+6. **Falla de extraccion explicita, distinta de fuente inalcanzable (`docs/adr/0015`).**
+   Si la fuente esta disponible pero su contenido no se puede extraer de forma legible
+   (un PDF sin capa de texto y sin OCR, un archivo corrupto, una hoja protegida), el
+   conector levanta una excepcion explicita (`IngestionExtractionError` o equivalente) --
+   nunca un `RawCapture` vacio, parcial o degradado en silencio. Una extraccion parcial
+   (algunas paginas/hojas/imagenes si, otras no) se declara explicita de la misma forma,
+   nunca se omite calladamente.
 
 ## Conectores implementados
 
@@ -80,3 +93,13 @@ siempre devuelve el mismo `RawCapture`:
   `lib/ingestion.py` necesite cambiar.
 
 Implementacion de referencia: `adapters/ingestion/meeting_file.py`.
+
+## Conectores que no persisten su captura (`docs/adr/0015`)
+
+Los conectores de documentos/PDF/hojas de calculo/imagenes (planeados en
+`docs/design/plan-ingesta-documentos.md`, todavia sin implementar) siguen este mismo
+contrato con una diferencia deliberada: ninguno de ellos, ni el codigo que orquesta su
+corrida, llama a `lib/ingestion.py::save_capture`. El archivo original se lee, se extrae
+su texto, y se descarta -- sin copia propia en el store de Context Assistant. Ver
+`docs/adr/0015` para el porque. Video queda explicitamente fuera de alcance de esta
+familia de conectores, en cualquier formato.

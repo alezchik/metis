@@ -362,6 +362,15 @@ marginal que inundar de PRs una cola que nadie va a revisar — un backlog de pr
 sería exactamente la misma divergencia entre "lo que el agente sabe" y "lo que la persona mantiene" que
 todo este proyecto existe para cerrar.
 
+**Conectores de documentos (docs/PDF/Excel/imagenes).** Ampliacion del pipeline mas alla
+de reuniones, decidida y planeada en `docs/adr/0015-conectores-documentos-sin-persistencia-de-crudo.md`
+y `docs/design/plan-ingesta-documentos.md` -- video explicitamente fuera de alcance, con dos
+diferencias respecto al parrafo de "Captura cruda" de arriba: una falla de extraccion (contenido
+no legible aunque la fuente si este disponible) tiene que ser tan explicita como una fuente
+inalcanzable, y estos conectores no persisten el archivo original en el store de Context
+Assistant en absoluto -- mas estricto que "destilado en el repo, crudo fuera de git" (principio 4),
+justificado en el ADR.
+
 ---
 
 ## 7. Seguridad: contenido externo es dato, nunca instrucción
@@ -576,6 +585,8 @@ necesitar escalar a humano.
 | Confidencialidad de transcripts/mails crudos | Nunca entran a git; viven en el store de Context Assistant con su propio control de acceso, citados por locator (§6) |
 | Contenido sensible/PII en el **destilado** (no solo el riesgo del crudo, fila anterior) | Sin mitigación automática todavía -- `docs/adr/0014` bloquea correr la ingesta de reuniones contra datos reales hasta agregar una regla de "Diet" en `skills/metis-ingest-meeting/SKILL.md` al mismo nivel que la de inyección de instrucciones |
 | El "propio control de acceso" del store de capturas crudas (fila anterior) todavía no está implementado en código | `docs/adr/0014` -- `lib/ingestion.py::save_capture` hoy solo se usa desde tests, sin una ruta de producción real ni control de acceso concreto |
+| Falla de extracción silenciosa en conectores de documentos/PDF/Excel/imágenes (contenido no legible, pero informado como si se hubiese extraído todo) | Regla nueva y explícita en `adapters/ingestion/CONTRACT.md` (`docs/adr/0015`): toda falla de extracción, total o parcial, levanta una excepción declarada -- nunca un `RawCapture` vacío o incompleto sin marcar |
+| Video como fuente de ingesta | Explícitamente fuera de alcance (`docs/adr/0015`) -- ningún formato de video se procesa, ni frames ni audio |
 | Mezcla de contexto entre clientes | Resuelto por construcción: un deployment aislado por proyecto, nunca multi-tenant (§5.1) |
 | El índice semántico se desincroniza del repo y empieza a responder con información vieja | `built_from` por commit sha en cada entrada indexada + reconstrucción completa posible en cualquier momento (§5.2) |
 | Cliente sin GitHub/GitLab hosteado (on-prem, sin API) | El formato markdown es portable incluso sin conector de PR automático — degrada a "generar el diff, un humano lo aplica a mano" en el peor caso, nunca bloquea la existencia de Context Base |

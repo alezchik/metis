@@ -50,3 +50,4 @@ nada mas, a `superseded by ADR-NNNN`.
 | [0012](0012-alcance-explicito-conectores-credencial-compartida.md) | Alcance explicito obligatorio en conectores sobre credenciales compartidas |
 | [0013](0013-no-se-construye-conector-notion.md) | No se construye el conector de Notion, pese a contar con credenciales reales |
 | [0014](0014-riesgo-contenido-sensible-ingesta.md) | La ingesta de reuniones no corre contra datos reales sin control de contenido sensible |
+| [0015](0015-conectores-documentos-sin-persistencia-de-crudo.md) | Conectores de documentos (docs/PDF/Excel/imagenes): video fuera de alcance, falla de extraccion explicita, sin persistencia del crudo |

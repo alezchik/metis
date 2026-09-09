@@ -115,6 +115,26 @@ Dedalo/Talos -- el contrato ya esta documentado (`docs/design/frontera-ecosistem
 `docs/handoff/integracion-dedalo.md` e `integracion-talos.md`. Implementarlo
 requiere tocar esos dos repos, separados de este.
 
+## Proximo hito: ingesta de documentos (docs, PDF, Excel, imagenes)
+
+Decidido y planeado (`docs/adr/0015-conectores-documentos-sin-persistencia-de-crudo.md`,
+`docs/design/plan-ingesta-documentos.md`), sin codigo todavia. Amplia el pipeline de
+ingesta mas alla del unico conector implementado hoy (reuniones) a cuatro familias de
+archivo: documentos de texto (Word/`.txt`/`.md`), PDF, hojas de calculo (Excel/CSV) e
+imagenes. Puntos ya resueltos por el ADR, no abiertos a discusion en la implementacion:
+
+- **Video explicitamente fuera de alcance** -- ningun formato, ni frames ni audio.
+- **Falla de extraccion siempre explicita** -- distinta de "fuente inalcanzable" (regla 3
+  ya existente): contenido no legible, aunque la fuente si este disponible, levanta un
+  error explicito, nunca un `RawCapture` vacio o parcial sin marcar.
+- **Sin persistencia del crudo original** -- mas estricto que el principio 4 vigente para
+  reuniones: estos conectores nunca llaman a `save_capture`, el archivo original se lee,
+  se extrae su texto, y se descarta.
+
+Preguntas de diseno todavia abiertas (documentadas en el plan, no bloquean arrancar):
+evidencia para hojas de calculo, OCR vs. modelo de vision para imagenes, y el enum de
+`source` nuevo (`spreadsheet`/`image`) en los schemas.
+
 ## Proponer un cambio a este roadmap
 
 Abrir un PR contra este archivo. Si lo que proponés tambien cambia algo cubierto

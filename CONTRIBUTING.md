@@ -48,6 +48,9 @@ Si toca alguna de estas cosas, agregar uno bajo `docs/adr/` (ver
 - cualquiera de los principios no negociables de la seccion 1 de
   `docs/design/spec-tecnica-funcional.md`
 - el contrato de frontera con Dedalo/Talos (`docs/design/frontera-ecosistema-talos.md`)
+- apartarse del patron de persistencia de crudo de la seccion 6 de la especificacion (por
+  ejemplo, un conector que decide no llamar a `save_capture` -- ver `docs/adr/0015` como
+  ejemplo de este patron)
 
 Un bug fix, un conector de ingesta nuevo que sigue el patron ya existente
 (`adapters/ingestion/CONTRACT.md`), o una aclaracion de documentacion no necesitan
@@ -71,6 +74,12 @@ un humano desde afuera del conector (`docs/adr/0012`, regla 5 de
 `adapters/ingestion/CONTRACT.md`). Esto no es opcional ni queda a criterio de quien
 lo escribe: Metis no distingue por usuario en su propio lado de lectura, asi que
 cualquier alcance de mas del lado de la fuente termina expuesto a todo el equipo.
+
+Para un conector que extrae de un formato binario (PDF, `.docx`, hoja de calculo, imagen)
+en vez de leer texto plano, ver `docs/design/plan-ingesta-documentos.md` -- documenta el
+enfoque recomendado por tipo de archivo, incluyendo que dependencia nueva justifica cada
+uno (regla de arriba, "sin dependencias nuevas sin justificarlas") y cuando una falla de
+extraccion (no solo de fuente inalcanzable) tiene que ser explicita.
 
 ## Agregar un tipo de entrada nuevo (mas alla de decision/requirement/risk)
 
