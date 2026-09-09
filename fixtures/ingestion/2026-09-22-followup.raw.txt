@@ -1,0 +1,16 @@
+Transcripcion -- Sync de seguimiento, proyecto Acme Reporting
+Fecha: 2026-09-22. Participantes: Maria Lopez (Product Owner, cliente), Juan Perez (Tech Lead, Xmartlabs).
+
+[00:01:10] Juan: Como veniamos, revisemos el estado del modulo de reporting.
+
+[00:04:20] Maria: Che, con respecto a la base de datos -- despues de hablarlo de nuevo
+con el equipo de datos, en realidad vamos a volver a evaluar DynamoDB para el modulo
+de reporting. Nos surgieron dudas sobre el costo de Postgres administrado a la escala
+que estamos proyectando para el año que viene, y el equipo de datos ahora prefiere
+DynamoDB de nuevo.
+
+[00:06:00] Juan: Ah, ok, eso contradice lo que habiamos cerrado en el kickoff. Lo
+anoto para que quede registrado el cambio de postura, aunque todavia no es definitivo
+del todo -- lo tenemos que confirmar formalmente.
+
+[00:12:00] Juan: Bien, seguimos con el resto de la agenda.

@@ -23,14 +23,19 @@ contexto que los otros dos pueden leer y, opcionalmente, escribir.
 
 ## Estado
 
-**Fase 0, 1, 2 y 3 completas.** Fase 0: los seis schemas + validador + fixtures. Fase
-1: indice lexical + MCP server de solo lectura. Fase 2: Write Agent
-(`propose_decision`/`propose_update`) + flujo de PR completo, disparado
-conversacionalmente via el mismo MCP server. Fase 3: primer conector de ingesta
-(reuniones) -- pipeline completo captura cruda -> destilacion -> dedup/match ->
-propuesta (ver criterios de salida en `docs/design/spec-tecnica-funcional.md`
-seccion 10). Contradiccion/superseding activado desde ingesta y mas fuentes quedan
-para Fase 4 (`docs/adr/0008`).
+**Fase 0, 1, 2 y 3 completas. Fase 4 completa con alcance explicito (`docs/adr/0010`).**
+Fase 0: los seis schemas + validador + fixtures. Fase 1: indice lexical + MCP server
+de solo lectura. Fase 2: Write Agent (`propose_decision`/`propose_update`) + flujo de
+PR completo, disparado conversacionalmente via el mismo MCP server. Fase 3: primer
+conector de ingesta (reuniones) -- pipeline completo captura cruda -> destilacion ->
+dedup/match -> propuesta. Fase 4: la logica de Query/Write Agent se extrajo a
+`context_assistant/core.py`, compartida por el transporte MCP y un transporte API
+REST nuevo (seccion 8.2); el flujo de superseding/`disputed` se activo desde ingesta
+real (`docs/adr/0009`) -- una segunda reunion que contradice una decision `confirmed`
+ya marca esa entrada `disputed`, citando ambas fuentes. Conectores de
+Confluence/Notion/mail y la web app quedan explicitamente afuera de esta corrida
+(`docs/adr/0010`) -- ver criterios de salida en `docs/design/spec-tecnica-funcional.md`
+seccion 10.
 
 ## Estructura del repo
 
@@ -49,7 +54,8 @@ lib/
 context_assistant/
   mcp_server.py            servidor MCP: las 6 operaciones de la seccion 8.1
                            (4 de lectura + propose_decision/propose_update)
-  ingestion.py             pipeline de ingesta: captura, umbral, dedup/match, propuesta (Fase 3)
+  ingestion.py             pipeline de ingesta: captura, umbral, dedup/match, propuesta,
+                           contradiccion->disputed (Fase 3 + Fase 4, docs/adr/0008-0009)
 adapters/
   CONTRACT.md              contrato del GitProvider que usa el Write Agent
   git_provider.py          rama + commit + PR (o su degradacion, ver docs/adr/0006)
@@ -58,16 +64,23 @@ adapters/
     meeting_file.py         conector "meeting_file": transcripcion en disco (Fase 3)
 skills/
   metis-ingest-meeting/SKILL.md   rol de destilacion (agentico) para reuniones
+context_assistant/
+  core.py                  Query Agent + Write Agent -- la UNICA logica, compartida
+                           por los dos transportes (seccion 5.2)
+  mcp_server.py            transporte MCP (seccion 8.1)
+  api_server.py            transporte API REST (seccion 8.2, Fase 4)
 fixtures/
   contextbase/       un Context Base "de mentira" completo, para probar sin cliente real
-  ingestion/         una transcripcion de ejemplo + su destilacion ya hecha a mano
+  ingestion/         dos transcripciones de ejemplo (una reunion + su seguimiento que
+                     contradice una decision) + sus destilaciones ya hechas a mano
 tests/
   test-validate-entries.sh      Fase 0: un archivo bien formado pasa, uno mal formado falla
   test-context-assistant.sh     Fase 1: retrieval/get/list_open_questions contra el fixture
   test-mcp-protocol.sh          Fase 1: las 4 operaciones de lectura via MCP real (stdio)
   test-write-agent.sh           Fase 2: propose_decision/propose_update + merge simulado
   test-mcp-write-protocol.sh    Fase 2: propose_decision via MCP real + el guard de escritura
-  test-ingestion.sh             Fase 3: pipeline completo, dedup, umbral de ruido, seguridad
+  test-ingestion.sh             Fase 3+4: pipeline completo, dedup, umbral, seguridad, contradiccion
+  test-api-server.sh            Fase 4: las 6 operaciones via HTTP real + auth por API key
 docs/
   design/            los tres documentos de diseno (fuente de verdad)
   adr/               decisiones de arquitectura tomadas durante la construccion
@@ -126,8 +139,10 @@ claude mcp add metis -- python3 /ruta/a/metis/context_assistant/mcp_server.py --
 Expone `search_knowledge(query, type?)`, `get_decision(id)`, `get_requirement(id)` y
 `list_open_questions()` -- las cuatro operaciones de lectura de la especificacion
 (seccion 8.1). `list_open_questions()` devuelve las entradas en estado `disputed`
-(ver `docs/adr/0003-preguntas-abiertas-son-disputed.md`). Cero operaciones de
-escritura todavia: eso es el Write Agent de Fase 2.
+(ver `docs/adr/0003-preguntas-abiertas-son-disputed.md`). La logica de las seis
+operaciones (estas cuatro + las dos de escritura de la seccion siguiente) vive en
+`context_assistant/core.py` -- este archivo es solo el transporte MCP, lo mismo que
+sirve `context_assistant/api_server.py` (seccion 8.2, Fase 4) por HTTP.
 
 ## Write Agent (Fase 2 -- seccion 5.2/8.1/2)
 
@@ -154,6 +169,34 @@ instrucciones exactas para terminarlo (ver `docs/adr/0006`).
 `--knowledge-dir`), ambas herramientas se rechazan con `{"error": "writes_disabled"}`
 -- `fixtures/contextbase` vive dentro de este mismo repo, y proponer contra el por
 accidente abriria una rama/PR real contra `alezchik/metis`.
+
+## API REST (Fase 4, seccion 8.2)
+
+```bash
+scripts/api-serve.sh --knowledge-dir /ruta/a/knowledge --api-key <key> [--port 8787]
+```
+
+Espejo delgado de las mismas seis operaciones, para automatizaciones del cliente que
+no hablan MCP -- mismo `context_assistant/core.py` por debajo, mismo guard de
+`writes_disabled` sobre el fixture de ejemplo. Requiere `X-Api-Key` en cada request
+(header) -- el proceso se niega a arrancar si no se paso `--api-key` ni se seteo
+`METIS_API_KEY` (nunca sirve sin autenticacion por default).
+
+```
+GET  /search?q=<query>&type=<type?>    -> search_knowledge
+GET  /decisions/<id>                   -> get_decision
+GET  /requirements/<id>                -> get_requirement
+GET  /open-questions                   -> list_open_questions
+POST /decisions            {payload}   -> propose_decision
+POST /entries/<id>/updates {payload}   -> propose_update
+```
+
+Un error de dominio (`not_found`, `writes_disabled`, `invalid_proposal`, ...) viaja
+siempre en el body con status HTTP 200 -- la logica de negocio es identica sea cual
+sea el transporte (seccion 5.2), asi que el status HTTP nunca cambia segun el tipo de
+error de dominio. Los unicos status distintos de 200 son de transporte puro: `401`
+(falta o es invalida la API key), `404` (la ruta en si no existe), `400` (el body del
+POST no es JSON valido).
 
 ## Ingesta (Fase 3 -- seccion 6/7, primer conector: reuniones)
 
@@ -189,6 +232,15 @@ propia destilacion lo marca en `security_findings`), la corrida entera de esa ca
 se frena (`status: security_review_required`) y no se abre ningun PR hasta que un
 humano la revise -- nunca se descarta en silencio, nunca se obedece.
 
+**Contradiccion activada (Fase 4, ver `docs/adr/0009`):** si un candidato trae
+`contradicts_id` y ese id resuelve a una entrada `confirmed` real del mismo tipo,
+`run_pipeline` no propone una entrada nueva -- propone marcar esa entrada `disputed`
+(via `propose_update`, misma transicion de `schemas/entry-state-machine.json` desde
+Fase 0), citando la evidencia de la fuente nueva. Nunca decide cual version vale: eso
+lo resuelve un humano revisando el PR. Ver `fixtures/ingestion/2026-09-22-followup.*`
+para el caso de ejemplo (una reunion de seguimiento que contradice la decision del
+kickoff).
+
 ## Correr los tests de este repo
 
 ```bash
@@ -197,7 +249,8 @@ tests/test-context-assistant.sh      # Fase 1 -- nucleo de indice/retrieval
 tests/test-mcp-protocol.sh           # Fase 1 -- via el protocolo MCP real (stdio)
 tests/test-write-agent.sh            # Fase 2 -- propose_decision/propose_update + merge simulado
 tests/test-mcp-write-protocol.sh     # Fase 2 -- propose_decision via MCP real + el guard
-tests/test-ingestion.sh              # Fase 3 -- pipeline completo, dedup, umbral, seguridad
+tests/test-ingestion.sh              # Fase 3+4 -- pipeline completo, dedup, umbral, seguridad, contradiccion
+tests/test-api-server.sh             # Fase 4 -- las 6 operaciones via HTTP real + auth por API key
 ```
 
 ## Principios (resumen; el detalle completo esta en la especificacion)

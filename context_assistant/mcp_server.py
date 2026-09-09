@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 """
-Metis -- Context Assistant, MCP server de Fase 1 (solo lectura).
-Ver docs/design/spec-tecnica-funcional.md seccion 8.1.
+Metis -- Context Assistant, transporte MCP (seccion 8.1).
 
-Expone las seis operaciones del contrato MCP (seccion 8.1):
+Expone las seis operaciones del contrato MCP:
   search_knowledge(query, type?)  -- retrieval con cita, nunca inventa
   get_decision(id)                -- una decision puntual, con status y superseding
   get_requirement(id)             -- un requisito puntual
   list_open_questions()           -- entradas status=disputed (ver docs/adr/0003)
   propose_decision(payload)       -- Write Agent: abre una propuesta (PR o su
                                      degradacion, ver adapters/CONTRACT.md) con una
-                                     decision nueva. Nunca mergea (Fase 2).
+                                     decision nueva. Nunca mergea.
   propose_update(id, payload)     -- Write Agent: propone actualizar una entrada
                                      existente (supersede, resolution, etc).
+
+Este modulo es solo el TRANSPORTE MCP -- toda la logica (retrieval, guard de
+escritura, Write Agent) vive en context_assistant/core.py, compartida con
+context_assistant/api_server.py (Fase 4, REST). Ningun otro transporte reimplementa
+nada de esto: "no hay cuatro implementaciones, hay una logica y cuatro transportes"
+(seccion 5.2).
 
 Un deployment real de Context Assistant es uno por proyecto/cliente (seccion 5.1) --
 este proceso sirve un unico knowledge_dir, pasado por --knowledge-dir o
@@ -28,67 +33,22 @@ Uso:
 """
 from __future__ import annotations
 
-import argparse
-import os
 import sys
 from pathlib import Path
-from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from lib.index import build_index, get_by_id, list_disputed, search  # noqa: E402
-from lib.write_agent import WriteAgentError, propose_decision as _propose_decision, propose_update as _propose_update  # noqa: E402
+from context_assistant.core import build_deployment_from_cli  # noqa: E402
 
 from mcp.server.mcpserver import MCPServer  # noqa: E402
 
-
-def _resolve_knowledge_dir() -> tuple[Path, bool]:
-    """Devuelve (knowledge_dir, writes_enabled). writes_enabled es False solo cuando
-    se cae al fixture de ejemplo por default -- ver el AVISO de seguridad arriba."""
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--knowledge-dir")
-    args, _unknown = parser.parse_known_args()
-
-    candidate = args.knowledge_dir or os.environ.get("METIS_KNOWLEDGE_DIR")
-    if candidate:
-        path = Path(candidate).resolve()
-        if not path.is_dir():
-            print(f"ERROR: --knowledge-dir {path} no existe", file=sys.stderr)
-            sys.exit(2)
-        return path, True
-
-    default = _REPO_ROOT / "fixtures" / "contextbase" / "knowledge"
-    print(
-        f"AVISO: sin --knowledge-dir ni METIS_KNOWLEDGE_DIR -- sirviendo el fixture de "
-        f"ejemplo ({default}) EN MODO SOLO LECTURA. Para un proyecto real (con "
-        f"escritura habilitada) pasar --knowledge-dir o setear METIS_KNOWLEDGE_DIR.",
-        file=sys.stderr,
-    )
-    return default, False
-
-
-def _find_repo_root(path: Path) -> Path | None:
-    for candidate in [path] + list(path.parents):
-        if (candidate / ".git").exists():
-            return candidate
-    return None
-
-
-KNOWLEDGE_DIR, WRITES_ENABLED = _resolve_knowledge_dir()
-REPO_ROOT_FOR_WRITES = _find_repo_root(KNOWLEDGE_DIR) if WRITES_ENABLED else None
-if WRITES_ENABLED and REPO_ROOT_FOR_WRITES is None:
-    print(
-        f"AVISO: {KNOWLEDGE_DIR} no esta dentro de ningun repo git -- propose_decision/"
-        f"propose_update van a fallar con un error claro si se llaman (necesitan un "
-        f".git real para poder proponer un PR).",
-        file=sys.stderr,
-    )
+DEPLOYMENT = build_deployment_from_cli()
 
 mcp = MCPServer(
     name="metis",
-    title="Metis Context Assistant (Fase 1, solo lectura)",
+    title="Metis Context Assistant",
     instructions=(
         "Memoria permanente de un proyecto: decisiones, requisitos, riesgos, sistemas, "
         "reuniones destiladas y terminos de glosario. Toda respuesta cita archivo + "
@@ -100,12 +60,6 @@ mcp = MCPServer(
         "la rama base; el humano que revisa el PR es quien confirma de verdad."
     ),
 )
-
-
-def _current_index() -> dict[str, Any]:
-    # Se reconstruye en cada llamada: el indice es derivado y reconstruible por
-    # definicion (seccion 5.2) -- para el volumen de Fase 1 no hace falta cachear.
-    return build_index(KNOWLEDGE_DIR)
 
 
 @mcp.tool()
@@ -120,7 +74,7 @@ def search_knowledge(query: str, type: str | None = None) -> list[dict]:
     Devuelve una lista vacia si no hay ninguna entrada relacionada -- nunca inventa
     una respuesta plausible (principio 3, "evidencia o silencio").
     """
-    return search(_current_index(), query, entry_type=type)
+    return DEPLOYMENT.search_knowledge(query, type)
 
 
 @mcp.tool()
@@ -130,13 +84,7 @@ def get_decision(id: str) -> dict:
     Si el id no existe, devuelve {"error": "not_found", ...} -- nunca un objeto
     inventado con ese id.
     """
-    result = get_by_id(_current_index(), id, entry_type="decision")
-    if result is None:
-        return {
-            "error": "not_found",
-            "message": f"no existe ninguna decision con id={id!r} en Context Base -- no esta documentado.",
-        }
-    return result
+    return DEPLOYMENT.get_decision(id)
 
 
 @mcp.tool()
@@ -145,13 +93,7 @@ def get_requirement(id: str) -> dict:
 
     Si el id no existe, devuelve {"error": "not_found", ...}.
     """
-    result = get_by_id(_current_index(), id, entry_type="requirement")
-    if result is None:
-        return {
-            "error": "not_found",
-            "message": f"no existe ningun requisito con id={id!r} en Context Base -- no esta documentado.",
-        }
-    return result
+    return DEPLOYMENT.get_requirement(id)
 
 
 @mcp.tool()
@@ -160,27 +102,7 @@ def list_open_questions() -> list[dict]:
     abierta para un humano, citando ambas (seccion 4.3). Lista vacia si no hay
     ninguna disputa abierta -- eso es un resultado valido, no un error.
     """
-    return list_disputed(_current_index())
-
-
-def _require_writes_enabled() -> dict | None:
-    if not WRITES_ENABLED:
-        return {
-            "error": "writes_disabled",
-            "message": (
-                "este deployment esta sirviendo el fixture de ejemplo (sin --knowledge-dir "
-                "ni METIS_KNOWLEDGE_DIR) -- las operaciones de escritura estan deshabilitadas "
-                "a proposito para no abrir una propuesta contra el repo de este tool por "
-                "accidente. Volver a levantar el server con --knowledge-dir apuntando a un "
-                "Context Base real."
-            ),
-        }
-    if REPO_ROOT_FOR_WRITES is None:
-        return {
-            "error": "no_git_repo",
-            "message": f"{KNOWLEDGE_DIR} no esta dentro de ningun repo git -- no se puede proponer un PR.",
-        }
-    return None
+    return DEPLOYMENT.list_open_questions()
 
 
 @mcp.tool()
@@ -200,13 +122,7 @@ def propose_decision(payload: dict) -> dict:
     Si el payload no valida contra decision.schema.json, se rechaza ANTES de tocar
     git -- nunca queda una propuesta a medio escribir.
     """
-    guard = _require_writes_enabled()
-    if guard:
-        return guard
-    try:
-        return _propose_decision(REPO_ROOT_FOR_WRITES, KNOWLEDGE_DIR, payload)
-    except WriteAgentError as exc:
-        return {"error": "invalid_proposal", "message": str(exc)}
+    return DEPLOYMENT.propose_decision(payload)
 
 
 @mcp.tool()
@@ -224,13 +140,7 @@ def propose_update(id: str, payload: dict) -> dict:
     schemas/entry-state-machine.json -- una transicion no declarada (ej. discarded ->
     confirmed) se rechaza antes de tocar git.
     """
-    guard = _require_writes_enabled()
-    if guard:
-        return guard
-    try:
-        return _propose_update(REPO_ROOT_FOR_WRITES, KNOWLEDGE_DIR, id, payload)
-    except WriteAgentError as exc:
-        return {"error": "invalid_proposal", "message": str(exc)}
+    return DEPLOYMENT.propose_update(id, payload)
 
 
 if __name__ == "__main__":

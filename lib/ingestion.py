@@ -16,13 +16,20 @@ Mismo split judgment/certification que ya usan Talos y Dedalo -- lo que se puede
 probar con un test unitario nunca vive en un SKILL.md, y lo que requiere juicio de un
 LLM nunca se reimplementa como codigo determinista "por las dudas".
 
-Alcance de Fase 3 (deliberadamente acotado -- ver docs/adr/0008): dedup/match acá
+Alcance de Fase 3 (deliberadamente acotado -- ver docs/adr/0008): dedup/match
 distingue "entrada nueva" de "duplicado de algo ya propuesto/confirmado" via
 similitud lexical de titulo. Detectar contradiccion contra una entrada `confirmed`
-existente y marcarla `disputed` automaticamente desde ingesta es Fase 4 (seccion 10
-de la especificacion lo lista ahi explicitamente, junto con "flujo de superseding
-activado"). Este modulo deja `updates_id`/`contradicts_id` del candidato como dato
-disponible en el schema para ese trabajo futuro, sin actuar sobre ellos todavia.
+existente y marcarla `disputed` automaticamente desde ingesta quedo explicitamente
+para Fase 4 (seccion 10 de la especificacion lo lista ahi, junto con "flujo de
+superseding activado") -- y esta version YA la implementa (ver docs/adr/0009):
+`classify_candidate` actua sobre `contradicts_id` cuando resuelve a una entrada
+`confirmed` real del mismo tipo, y `run_pipeline` la marca `disputed` via
+`lib.write_agent.propose_update` (la transicion `confirmed -> disputed` ya estaba
+declarada en `schemas/entry-state-machine.json` desde Fase 0). `updates_id` sigue sin
+usarse -- el flujo de superseding completo ("marcar una decision como reemplazada")
+necesita decidir cual de las dos versiones vale, y eso todavia requiere que un humano
+lo resuelva a mano via `propose_update` conversacional (Fase 2), nunca automatico
+desde ingesta.
 
 Seguridad (principio 6, seccion 7): antes de proponer nada de una captura, se corre
 una red de seguridad mecanica (`scan_for_embedded_instructions`) sobre el texto
@@ -48,7 +55,7 @@ import yaml  # noqa: E402
 from jsonschema import Draft7Validator  # noqa: E402
 
 from lib.index import build_index  # noqa: E402
-from lib.write_agent import WriteAgentError, propose_new_entry  # noqa: E402
+from lib.write_agent import WriteAgentError, propose_new_entry, propose_update as _propose_update  # noqa: E402
 
 CANDIDATE_ENTRY_TYPES = ("decision", "requirement", "risk")
 
@@ -142,13 +149,34 @@ def validate_candidate(candidate: dict[str, Any]) -> list[str]:
 def classify_candidate(
     candidate: dict[str, Any], index: dict[str, Any], dedup_similarity: float = DEFAULT_DEDUP_SIMILARITY
 ) -> dict[str, Any]:
-    """Dedup/match (seccion 6). Alcance de Fase 3 (docs/adr/0008): distingue
-    'entrada nueva' de 'duplicado de algo ya propuesto/confirmado' via similitud
-    lexical de titulo contra entradas del mismo tipo. NO actua sobre
-    updates_id/contradicts_id del candidato -- eso es Fase 4. Nunca decide una
-    superseding ni un disputed por si solo."""
+    """Dedup/match (seccion 6). Tres acciones posibles:
+
+    - 'contradiction' -- el candidato trae `contradicts_id` y ese id resuelve a una
+      entrada `confirmed` real del mismo tipo (Fase 4, docs/adr/0009): esa entrada se
+      marca `disputed`, citando la nueva evidencia -- nunca se decide cual version
+      vale, eso lo hace un humano revisando el PR (seccion 4.3).
+    - 'duplicate' -- ya existe una entrada `proposed` o `confirmed` del mismo tipo con
+      un titulo lo bastante parecido (similitud lexical via difflib). No se propone
+      de nuevo.
+    - 'new' -- ninguno de los dos casos anteriores: se propone como entrada nueva.
+
+    Si `contradicts_id` viene pero no resuelve a una entrada `confirmed` real (id
+    inexistente, tipo distinto, o ya no esta `confirmed`), no se puede actuar sobre
+    una contradiccion que no existe -- se sigue con el dedup/match normal, pero se
+    deja marcado en el resultado (`contradiction_target_invalid`) para que
+    `run_pipeline` lo registre como nota, nunca en silencio."""
     entry_type = candidate["entry_type"]
     title = candidate["title"]
+
+    contradicts_id = candidate.get("contradicts_id")
+    if contradicts_id:
+        target = next(
+            (e for e in index["entries"] if e["id"] == contradicts_id and e["type"] == entry_type),
+            None,
+        )
+        if target is not None and target.get("status") == "confirmed":
+            return {"action": "contradiction", "matched_id": contradicts_id, "similarity": None}
+
     best = None
     best_ratio = 0.0
     for entry in index["entries"]:
@@ -161,9 +189,15 @@ def classify_candidate(
         ).ratio()
         if ratio > best_ratio:
             best_ratio, best = ratio, entry
+
     if best is not None and best_ratio >= dedup_similarity:
-        return {"action": "duplicate", "matched_id": best["id"], "similarity": round(best_ratio, 4)}
-    return {"action": "new", "matched_id": None, "similarity": round(best_ratio, 4)}
+        result: dict[str, Any] = {"action": "duplicate", "matched_id": best["id"], "similarity": round(best_ratio, 4)}
+    else:
+        result = {"action": "new", "matched_id": None, "similarity": round(best_ratio, 4)}
+
+    if contradicts_id:
+        result["contradiction_target_invalid"] = contradicts_id
+    return result
 
 
 def _candidate_to_new_payload(candidate: dict[str, Any], requested_by: str, context_ref: str | None) -> dict[str, Any]:
@@ -207,6 +241,31 @@ def _candidate_to_new_payload(candidate: dict[str, Any], requested_by: str, cont
             payload["mitigated_by"] = candidate["mitigated_by"]
 
     return payload
+
+
+def _candidate_to_contradiction_payload(candidate: dict[str, Any], requested_by: str, context_ref: str | None) -> dict[str, Any]:
+    """Arma el payload de propose_update (lib/write_agent.py) para marcar 'disputed'
+    la entrada confirmed que este candidato contradice (Fase 4, docs/adr/0009). La
+    razon cita la evidencia nueva tal cual -- nunca decide cual de las dos versiones
+    vale, eso es exactamente lo que un humano revisando el PR tiene que resolver
+    (seccion 4.3: 'dos fuentes no coinciden y ninguna automatizacion decide cual
+    vale')."""
+    reason_lines = [
+        f"La ingesta encontro una fuente nueva que contradice esta entrada (confidence={candidate.get('confidence')}).",
+        f"Candidato en conflicto: {candidate.get('title')}",
+    ]
+    if candidate.get("body"):
+        reason_lines.append(candidate["body"])
+    reason_lines.append("Evidencia citada por la fuente nueva:")
+    for ev in candidate.get("evidence") or []:
+        locator = f" ({ev['locator']})" if ev.get("locator") else ""
+        reason_lines.append(f"- {ev.get('source')}: {ev.get('ref')}{locator}")
+    return {
+        "patch": {"status": "disputed"},
+        "reason": "\n".join(reason_lines),
+        "requested_by": requested_by,
+        "context_ref": context_ref,
+    }
 
 
 def _find_config_path(base: Path) -> Path | None:
@@ -269,6 +328,7 @@ def run_pipeline(
         "skipped_low_confidence": [],
         "skipped_duplicate": [],
         "rejected_invalid": [],
+        "notes": [],
     }
 
     if security_findings:
@@ -294,8 +354,28 @@ def run_pipeline(
             continue
 
         classification = classify_candidate(candidate, index)
+
+        if classification.get("contradiction_target_invalid"):
+            result["notes"].append(
+                f"candidato {title!r} declara contradicts_id={classification['contradiction_target_invalid']!r} "
+                f"pero no resuelve a una entrada confirmed de tipo {candidate['entry_type']!r} -- se trato como "
+                f"{classification['action']} en su lugar."
+            )
+
         if classification["action"] == "duplicate":
             result["skipped_duplicate"].append({"title": title, **classification})
+            continue
+
+        if classification["action"] == "contradiction":
+            update_payload = _candidate_to_contradiction_payload(candidate, requested_by, capture.get("locator"))
+            try:
+                receipt = _propose_update(repo_root, knowledge_dir, classification["matched_id"], update_payload)
+            except WriteAgentError as exc:
+                result["rejected_invalid"].append({"title": title, "errors": [str(exc)]})
+                continue
+            receipt["candidate_title"] = title
+            receipt["dedup"] = classification
+            result["proposed"].append(receipt)
             continue
 
         payload = _candidate_to_new_payload(candidate, requested_by, capture.get("locator"))

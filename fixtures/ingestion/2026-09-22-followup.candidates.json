@@ -1,0 +1,24 @@
+{
+  "candidates": [
+    {
+      "entry_type": "decision",
+      "title": "Reevaluar DynamoDB para el modulo de reporting (contradice DEC-0001)",
+      "confidence": "FACT",
+      "evidence": [
+        {
+          "source": "meeting",
+          "ref": "fixtures/ingestion/2026-09-22-followup.raw.txt",
+          "locator": "[00:04:20] Maria: vamos a volver a evaluar DynamoDB para el modulo de reporting, el equipo de datos ahora prefiere DynamoDB de nuevo."
+        }
+      ],
+      "body": "El cliente volvio sobre la decision de usar Postgres (DEC-0001): ahora el equipo de datos prefiere reevaluar DynamoDB por costo de Postgres administrado a la escala proyectada. Juan aclaro en la propia reunion que todavia no es definitivo.",
+      "tags": [
+        "arquitectura",
+        "storage"
+      ],
+      "contradicts_id": "DEC-0001"
+    }
+  ],
+  "open_questions": [],
+  "security_findings": []
+}

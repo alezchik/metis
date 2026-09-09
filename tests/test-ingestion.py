@@ -249,6 +249,62 @@ def main() -> int:
         check("tambien se frena cuando la propia destilacion marca el hallazgo", result6["status"] == "security_review_required")
         check("se combinan los hallazgos declarados por la destilacion y los de la red mecanica", len(result6["security_findings"]) >= 2)
 
+        # --- contradiccion (Fase 4, docs/adr/0009): contradicts_id que resuelve a una
+        # entrada confirmed real marca esa entrada disputed, citando la evidencia nueva ---
+        repo_root_b = tmp_dir / "cliente-descartable-contradiccion"
+        _run([str(REPO_ROOT / "scripts" / "contextbase-install.sh"), str(repo_root_b)], REPO_ROOT)
+        _run(["git", "init", "-q"], repo_root_b)
+        _run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "add", "-A"], repo_root_b)
+        _run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "scaffold inicial"], repo_root_b)
+        knowledge_dir_b = repo_root_b / "knowledge"
+
+        seed_confirmed = knowledge_dir_b / "decisions" / "0001-postgres.md"
+        seed_confirmed.write_text(
+            "---\n"
+            "id: DEC-0001\n"
+            "type: decision\n"
+            "status: confirmed\n"
+            "title: \"Usar Postgres en vez de DynamoDB para el modulo de reporting\"\n"
+            "date: 2026-09-08\n"
+            "decided_by: [\"maria@cliente.com\"]\n"
+            "supersedes: null\n"
+            "superseded_by: null\n"
+            "evidence:\n"
+            "  - source: meeting\n"
+            "    ref: \"fixtures/ingestion/2026-09-08-kickoff.raw.txt\"\n"
+            "tags: [arquitectura, storage]\n"
+            "confidence: FACT\n"
+            "---\n\n"
+            "Decision ya confirmada por un humano (simula el resultado de la escritura conversacional de Fase 2).\n",
+            encoding="utf-8",
+        )
+        _run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "add", "-A"], repo_root_b)
+        _run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "seed DEC-0001 confirmed"], repo_root_b)
+
+        followup_capture = fetch_raw(FIXTURES_DIR / "2026-09-22-followup.raw.txt", capture_id="2026-09-22-followup")
+        followup_destilled = json.loads((FIXTURES_DIR / "2026-09-22-followup.candidates.json").read_text(encoding="utf-8"))
+
+        result7 = ingestion.run_pipeline(repo_root_b, knowledge_dir_b, followup_capture, followup_destilled, requested_by="metis-ingestion:meeting_file")
+        check("una reunion de seguimiento que contradice DEC-0001 (confirmed) produce una propuesta", result7["status"] == "ok" and len(result7["proposed"]) == 1)
+        contradiction_receipt = result7["proposed"][0]
+        check("la propuesta es sobre DEC-0001 (propose_update, no una entrada nueva)", contradiction_receipt.get("id") == "DEC-0001")
+        check("la clasificacion de dedup/match marca accion=contradiction", contradiction_receipt.get("dedup", {}).get("action") == "contradiction")
+        check("no quedan notas de contradiccion invalida (el id si resolvia)", result7["notes"] == [])
+
+        _merge_branch_locally(repo_root_b, contradiction_receipt["branch"])
+        index_b = build_index(knowledge_dir_b)
+        dec1_after = get_by_id(index_b, "DEC-0001", entry_type="decision")
+        check("tras el merge, DEC-0001 queda status=disputed (seccion 4.3: dos fuentes no coinciden)", bool(dec1_after) and dec1_after["status"] == "disputed")
+
+        # --- contradicts_id que NO resuelve a una entrada confirmed real: se trata como
+        # entrada nueva/duplicado en su lugar, y queda una nota (nunca se actua en silencio) ---
+        followup_bad_target = json.loads(json.dumps(followup_destilled))
+        followup_bad_target["candidates"][0]["contradicts_id"] = "DEC-9999"
+        followup_bad_target["candidates"][0]["title"] = "Titulo distinto para no chocar con dedup de titulo"
+        result8 = ingestion.run_pipeline(repo_root_b, knowledge_dir_b, followup_capture, followup_bad_target, requested_by="metis-ingestion:meeting_file")
+        check("contradicts_id que no resuelve a una entrada confirmed real no se actua como contradiccion", all(r.get("dedup", {}).get("action") != "contradiction" for r in result8["proposed"]))
+        check("queda registrada una nota explicita sobre el contradicts_id invalido (nunca en silencio)", len(result8["notes"]) == 1 and "DEC-9999" in result8["notes"][0])
+
         # --- propose_new_entry: tipo no soportado se rechaza antes de tocar git ---
         try:
             propose_new_entry(repo_root, knowledge_dir, "system", {"title": "x", "evidence": [{"source": "manual", "ref": "x"}], "confidence": "FACT", "requested_by": "x"})
