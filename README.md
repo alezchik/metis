@@ -23,9 +23,11 @@ contexto que los otros dos pueden leer y, opcionalmente, escribir.
 
 ## Estado
 
-**Fase 0 (fundaciones) completa** -- ver criterio de salida en
-`docs/design/primeros-pasos.md` seccion 2. Sin ingesta, sin indice, sin agentes
-todavia: eso arranca en Fase 1.
+**Fase 0 y Fase 1 completas.** Fase 0: los seis schemas + validador + fixtures (ver
+criterio de salida en `docs/design/primeros-pasos.md` seccion 2). Fase 1: indice
+lexical + MCP server de solo lectura (ver criterio de salida en
+`docs/design/spec-tecnica-funcional.md` seccion 10). Sin ingesta ni Write Agent
+todavia: eso arranca en Fase 2/3.
 
 ## Estructura del repo
 
@@ -34,15 +36,29 @@ schemas/            los seis JSON Schema de tipos de entrada + la maquina de est
 scripts/
   contextbase-install.sh   scaffolding de un Context Base vacio para un cliente nuevo
   validate-entries.sh      corre el validador contra un knowledge/ (para CI del cliente)
+  reindex.sh               reconstruye el indice lexical contra un knowledge/
+  mcp-serve.sh             levanta el MCP server (Fase 1, solo lectura) por stdio
 lib/
   validate_frontmatter.py  nucleo deterministico: YAML frontmatter + JSON Schema
+  index.py                 indice lexical derivado + retrieval + get-by-id (Fase 1)
+context_assistant/
+  mcp_server.py            servidor MCP: search_knowledge, get_decision,
+                           get_requirement, list_open_questions (seccion 8.1)
 fixtures/
   contextbase/       un Context Base "de mentira" completo, para probar sin cliente real
 tests/
-  test-validate-entries.sh   valida que un archivo bien formado pasa y uno mal formado falla
+  test-validate-entries.sh    Fase 0: un archivo bien formado pasa, uno mal formado falla
+  test-context-assistant.sh   Fase 1: retrieval/get/list_open_questions contra el fixture
+  test-mcp-protocol.sh        Fase 1: las cuatro operaciones via el protocolo MCP real (stdio)
 docs/
   design/            los tres documentos de diseno (fuente de verdad)
   adr/               decisiones de arquitectura tomadas durante la construccion
+```
+
+## Instalar dependencias
+
+```bash
+pip install -r requirements.txt   # o: pip install --user -r requirements.txt
 ```
 
 ## Como instalar un Context Base para un cliente nuevo
@@ -68,10 +84,39 @@ scripts/validate-entries.sh                        # sin argumentos, valida fixt
 Sale con status distinto de cero si alguna entrada no valida contra su schema --
 pensado para correr en el CI del propio repo del cliente.
 
+## Indice semantico (Fase 1, MVP lexical -- ver docs/adr/0002)
+
+```bash
+scripts/reindex.sh                          # reconstruye contra fixtures/contextbase/knowledge
+scripts/reindex.sh /ruta/a/knowledge         # o contra un Context Base real
+python3 lib/index.py search /ruta/a/knowledge/../.contextbase/index/index.json "SSO Okta"
+```
+
+## Servidor MCP (Fase 1, solo lectura -- seccion 8.1)
+
+```bash
+scripts/mcp-serve.sh --knowledge-dir /ruta/a/knowledge
+# o, sin argumentos, sirve fixtures/contextbase/knowledge (solo para probar)
+```
+
+Registrarlo en un cliente MCP (ej. Claude Code):
+
+```bash
+claude mcp add metis -- python3 /ruta/a/metis/context_assistant/mcp_server.py --knowledge-dir /ruta/a/knowledge
+```
+
+Expone `search_knowledge(query, type?)`, `get_decision(id)`, `get_requirement(id)` y
+`list_open_questions()` -- las cuatro operaciones de lectura de la especificacion
+(seccion 8.1). `list_open_questions()` devuelve las entradas en estado `disputed`
+(ver `docs/adr/0003-preguntas-abiertas-son-disputed.md`). Cero operaciones de
+escritura todavia: eso es el Write Agent de Fase 2.
+
 ## Correr los tests de este repo
 
 ```bash
-tests/test-validate-entries.sh
+tests/test-validate-entries.sh       # Fase 0
+tests/test-context-assistant.sh      # Fase 1 -- nucleo de indice/retrieval
+tests/test-mcp-protocol.sh           # Fase 1 -- via el protocolo MCP real (stdio)
 ```
 
 ## Principios (resumen; el detalle completo esta en la especificacion)

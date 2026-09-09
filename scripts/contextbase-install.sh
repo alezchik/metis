@@ -105,4 +105,12 @@ ingestion:
   confidence_threshold: 0.6     # umbral de confianza/relevancia para proponer (seccion 6)
 YAMLEOF
 
+cat > "$TARGET/.gitignore" <<'GITEOF'
+.contextbase/index/
+.contextbase/config.yaml
+__pycache__/
+*.pyc
+.DS_Store
+GITEOF
+
 echo "Context Base scaffolded en: $TARGET (mode=$MODE)"

@@ -1,3 +1,7 @@
 __pycache__/
 *.pyc
 .DS_Store
+
+# el indice semantico es derivado y reconstruible (scripts/reindex.sh) -- nunca se
+# commitea, ni siquiera en el fixture de ejemplo.
+.contextbase/index/

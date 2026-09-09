@@ -5,7 +5,7 @@
   "description": "Frontmatter de una entrada knowledge/decisions/*.md. Ver docs/design/spec-tecnica-funcional.md seccion 4.2.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "type", "status", "title", "date", "decided_by", "evidence", "confidence"],
+  "required": ["id", "type", "status", "title", "date", "evidence", "confidence"],
   "properties": {
     "id": { "type": "string", "pattern": "^DEC-[0-9]{4}$" },
     "type": { "const": "decision" },
@@ -31,5 +31,12 @@
     },
     "tags": { "type": "array", "items": { "type": "string" } },
     "confidence": { "type": "string", "enum": ["FACT", "INFERENCE", "UNKNOWN", "CONFLICT"] }
-  }
+  },
+  "allOf": [
+    {
+      "comment": "decided_by solo es obligatorio una vez que alguien decidio de verdad -- confirmed o superseded. proposed/disputed pueden no tener todavia un decisor (seccion 4.3; ver docs/adr/0004-decided-by-condicional.md).",
+      "if": { "properties": { "status": { "enum": ["confirmed", "superseded"] } }, "required": ["status"] },
+      "then": { "required": ["decided_by"] }
+    }
+  ]
 }

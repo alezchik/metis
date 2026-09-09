@@ -1,0 +1,5 @@
+# Dependencias de lib/ y context_assistant/ (Fase 0 + Fase 1).
+# Instalar con: pip install -r requirements.txt (o --user si no hay virtualenv)
+pyyaml>=6.0
+jsonschema>=3.2
+mcp>=2.0
