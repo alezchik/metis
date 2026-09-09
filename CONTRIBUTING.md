@@ -51,6 +51,11 @@ Si toca alguna de estas cosas, agregar uno bajo `docs/adr/` (ver
 - apartarse del patron de persistencia de crudo de la seccion 6 de la especificacion (por
   ejemplo, un conector que decide no llamar a `save_capture` -- ver `docs/adr/0015` como
   ejemplo de este patron)
+- agregar un conector de lectura en vivo de un sistema externo (tracker, codigo) que
+  consulta estado en el momento en vez de traer contenido para destilar -- familia
+  distinta de `adapters/ingestion/CONTRACT.md`, ver `docs/adr/0016` y
+  `docs/design/plan-auditoria-implementacion.md`. La regla que nunca se afloja: ese
+  estado no se cachea como hecho propio en Context Base.
 
 Un bug fix, un conector de ingesta nuevo que sigue el patron ya existente
 (`adapters/ingestion/CONTRACT.md`), o una aclaracion de documentacion no necesitan

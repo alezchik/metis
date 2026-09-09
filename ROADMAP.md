@@ -135,6 +135,32 @@ Preguntas de diseno todavia abiertas (documentadas en el plan, no bloquean arran
 evidencia para hojas de calculo, OCR vs. modelo de vision para imagenes, y el enum de
 `source` nuevo (`spreadsheet`/`image`) en los schemas.
 
+## Proxima fase: auditoria de brechas (tracker + codigo en vivo)
+
+Decidida y planeada (`docs/adr/0016-auditoria-brechas-tracker-codigo-en-vivo.md`,
+`docs/design/plan-auditoria-implementacion.md`), sin codigo todavia. Responde en una
+sola consulta "de lo documentado como `requirement`, que esta implementado, que tiene
+ticket sin implementar, y que ni siquiera tiene ticket -- priorizado", sin preguntarle
+a Metis/tracker/repo por separado. Dos reglas centrales, ya decididas, no abiertas a
+discusion en la implementacion:
+
+- **Nunca se cachea estado como hecho propio.** Lo unico que se puede guardar en
+  Context Base es una cita historica ("se creo un ticket tal fecha") -- el estado
+  actual (existe/no existe, implementado/no) siempre se vuelve a consultar en vivo.
+  Evita exactamente el problema de duplicar fuente de verdad que aparece si alguien
+  borra un ticket del lado del tracker despues de citarlo.
+- **Funciona sin Dedalo ni Talos desplegados.** Vive enteramente del lado de Metis,
+  con sus propios conectores de lectura en vivo (tracker + codigo) y su propia
+  interfaz minima (un script que escribe un reporte Markdown a disco) -- un cliente
+  que solo tiene Metis (sin Dedalo/Talos, que son herramientas internas de
+  Xmartlabs) tiene que poder usar esto igual.
+
+Preguntas de diseno todavia abiertas (documentadas en el plan, no bloquean arrancar):
+que tracker soportar primero, el enum de `source` nuevo (`tracker`), y como se
+implementa la lectura de codigo (grep simple vs. algo mas parecido a la busqueda
+semantica que ya tiene el Investigator de Dedalo -- la duplicacion de esa capacidad
+entre Metis y Dedalo esta aceptada, no es un problema a resolver).
+
 ## Proponer un cambio a este roadmap
 
 Abrir un PR contra este archivo. Si lo que proponés tambien cambia algo cubierto

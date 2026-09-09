@@ -124,6 +124,13 @@ evolución natural sin una decisión explícita nueva:
   arrancar una iniciativa sigue siendo una decisión humana explícita, no algo que Metis dispara
   solo porque detectó una idea mencionada en una reunión ingerida.
 
+**Nota (`docs/adr/0016`).** Metis suma lectura en vivo del tracker y del código del
+propio proyecto para una auditoría de brechas (documentado vs. implementado) — esto
+no cambia ningún no-goal de arriba: sigue sin generar tickets, sigue sin reemplazar
+al tracker como sistema de registro de ejecución, sigue sin decidir nada por su
+cuenta. Es lectura adicional, nunca escritura ni ejecución, y funciona
+independientemente de si Dédalo/Talos están desplegados para ese proyecto.
+
 ---
 
 ## 5. Qué pasa si el contrato de handoff cambia
