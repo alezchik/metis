@@ -1,0 +1,41 @@
+Transcripcion -- Reunion de kickoff, proyecto Acme Reporting
+Fecha: 2026-09-08. Participantes: Maria Lopez (Product Owner, cliente), Juan Perez (Tech Lead, Xmartlabs), Carla Ruiz (Dev, Xmartlabs).
+
+[00:02:15] Juan: Bueno, arrancamos. El primer punto es la base de datos para el modulo
+de reporting. Habiamos evaluado Postgres y DynamoDB la semana pasada.
+
+[00:03:40] Maria: Si, y del lado del cliente ya lo charlamos con el equipo de datos.
+Decidimos usar Postgres para el modulo de reporting, no DynamoDB. La razon principal
+es que necesitamos hacer joins complejos entre tablas de ventas y de usuarios, y eso
+en DynamoDB nos iba a obligar a desnormalizar todo.
+
+[00:05:10] Juan: Perfecto, lo anoto como decision. Postgres entonces.
+
+[00:07:22] Carla: Con respecto a los requisitos, veo que en el documento original no
+quedo claro si SSO con Okta es parte de este sprint o del siguiente.
+
+[00:07:55] Maria: SSO con Okta lo necesitamos si o si para el lanzamiento, pero puede
+esperar al sprint 3 -- no es bloqueante para lo que estamos armando ahora.
+
+[00:09:12] Juan: Ok, entonces lo dejamos como requisito abierto, target sprint 3, no
+bloqueante para el sprint actual.
+
+[00:14:30] Carla: Otra cosa que me preocupa: el conector de mail que vamos a usar para
+notificaciones depende de un servicio externo (SendGrid) que en el pasado tuvo caidas
+largas. Si se cae durante un pico de reportes mensuales, podriamos perder notificaciones
+importantes para el cliente.
+
+[00:15:02] Maria: Uy, si, eso ya nos paso con otro proveedor antes. Sería bueno que
+quede anotado como riesgo, alto, para que no se nos escape.
+
+[00:15:40] Juan: De acuerdo, riesgo alto, dueño del lado nuestro Carla, mitigacion
+pendiente de definir.
+
+[00:22:00] Carla: Ultima cosa, medio en el aire: alguien menciono en un pasillo que
+capaz el cliente quiere migrar todo a otro proveedor de cloud el año que viene, pero
+no se si eso es una posibilidad real o un comentario al pasar.
+
+[00:22:30] Maria: No, no tengo nada confirmado sobre eso todavia, fue mas un comentario
+mio pensando en voz alta. No lo tomen como definido.
+
+[00:35:00] Juan: Bien, cerramos la reunion. Gracias a todos.

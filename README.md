@@ -23,12 +23,14 @@ contexto que los otros dos pueden leer y, opcionalmente, escribir.
 
 ## Estado
 
-**Fase 0, 1 y 2 completas.** Fase 0: los seis schemas + validador + fixtures. Fase 1:
-indice lexical + MCP server de solo lectura. Fase 2: Write Agent
+**Fase 0, 1, 2 y 3 completas.** Fase 0: los seis schemas + validador + fixtures. Fase
+1: indice lexical + MCP server de solo lectura. Fase 2: Write Agent
 (`propose_decision`/`propose_update`) + flujo de PR completo, disparado
-conversacionalmente via el mismo MCP server (ver criterios de salida en
-`docs/design/spec-tecnica-funcional.md` seccion 10). Sin ingesta automatica todavia:
-eso arranca en Fase 3.
+conversacionalmente via el mismo MCP server. Fase 3: primer conector de ingesta
+(reuniones) -- pipeline completo captura cruda -> destilacion -> dedup/match ->
+propuesta (ver criterios de salida en `docs/design/spec-tecnica-funcional.md`
+seccion 10). Contradiccion/superseding activado desde ingesta y mas fuentes quedan
+para Fase 4 (`docs/adr/0008`).
 
 ## Estructura del repo
 
@@ -47,17 +49,25 @@ lib/
 context_assistant/
   mcp_server.py            servidor MCP: las 6 operaciones de la seccion 8.1
                            (4 de lectura + propose_decision/propose_update)
+  ingestion.py             pipeline de ingesta: captura, umbral, dedup/match, propuesta (Fase 3)
 adapters/
   CONTRACT.md              contrato del GitProvider que usa el Write Agent
   git_provider.py          rama + commit + PR (o su degradacion, ver docs/adr/0006)
+  ingestion/
+    CONTRACT.md            contrato de conectores de ingesta (fetch_raw -> RawCapture)
+    meeting_file.py         conector "meeting_file": transcripcion en disco (Fase 3)
+skills/
+  metis-ingest-meeting/SKILL.md   rol de destilacion (agentico) para reuniones
 fixtures/
   contextbase/       un Context Base "de mentira" completo, para probar sin cliente real
+  ingestion/         una transcripcion de ejemplo + su destilacion ya hecha a mano
 tests/
   test-validate-entries.sh      Fase 0: un archivo bien formado pasa, uno mal formado falla
   test-context-assistant.sh     Fase 1: retrieval/get/list_open_questions contra el fixture
   test-mcp-protocol.sh          Fase 1: las 4 operaciones de lectura via MCP real (stdio)
   test-write-agent.sh           Fase 2: propose_decision/propose_update + merge simulado
   test-mcp-write-protocol.sh    Fase 2: propose_decision via MCP real + el guard de escritura
+  test-ingestion.sh             Fase 3: pipeline completo, dedup, umbral de ruido, seguridad
 docs/
   design/            los tres documentos de diseno (fuente de verdad)
   adr/               decisiones de arquitectura tomadas durante la construccion
@@ -145,6 +155,40 @@ instrucciones exactas para terminarlo (ver `docs/adr/0006`).
 -- `fixtures/contextbase` vive dentro de este mismo repo, y proponer contra el por
 accidente abriria una rama/PR real contra `alezchik/metis`.
 
+## Ingesta (Fase 3 -- seccion 6/7, primer conector: reuniones)
+
+```bash
+python3 -c "
+from adapters.ingestion.meeting_file import fetch_raw
+from lib import ingestion
+import json
+
+capture = fetch_raw('fixtures/ingestion/2026-09-08-kickoff.raw.txt', capture_id='2026-09-08-kickoff')
+destilled = json.load(open('fixtures/ingestion/2026-09-08-kickoff.candidates.json'))
+result = ingestion.run_pipeline('/ruta/al/repo-del-cliente', '/ruta/al/repo-del-cliente/knowledge', capture, destilled, requested_by='metis-ingestion:meeting_file')
+print(json.dumps(result, indent=2, ensure_ascii=False))
+"
+```
+
+Pipeline completo de la seccion 6: `adapters/ingestion/meeting_file.py` trae la
+transcripcion cruda (nunca a git, ver `lib/ingestion.save_capture`); la destilacion
+(`skills/metis-ingest-meeting/SKILL.md`, un rol agentico -- requiere juicio de un
+modelo, por eso vive como skill y no como codigo) la convierte en candidatos
+clasificados `FACT`/`INFERENCE` (nunca `UNKNOWN`, que se registra aparte como
+`open_question`); `lib/ingestion.run_pipeline` valida cada candidato contra
+`schemas/ingestion-candidate.schema.json`, filtra por el umbral de ruido
+(`.contextbase/config.yaml: ingestion.confidence_threshold`), hace dedup/match contra
+el indice (evita re-proponer lo mismo dos veces -- ver alcance exacto en
+`docs/adr/0008`), y propone lo que sobrevive via `lib/write_agent.propose_new_entry`
+(la misma via de PR de Fase 2, sin operaciones MCP nuevas). Toda entrada que sale de
+ingesta queda `status: proposed`, nunca `confirmed` -- ver `docs/adr/0008`.
+
+**Seguridad (seccion 7):** si el texto crudo de una captura tiene forma de
+instruccion dirigida al sistema (`lib/ingestion.scan_for_embedded_instructions`, o la
+propia destilacion lo marca en `security_findings`), la corrida entera de esa captura
+se frena (`status: security_review_required`) y no se abre ningun PR hasta que un
+humano la revise -- nunca se descarta en silencio, nunca se obedece.
+
 ## Correr los tests de este repo
 
 ```bash
@@ -153,6 +197,7 @@ tests/test-context-assistant.sh      # Fase 1 -- nucleo de indice/retrieval
 tests/test-mcp-protocol.sh           # Fase 1 -- via el protocolo MCP real (stdio)
 tests/test-write-agent.sh            # Fase 2 -- propose_decision/propose_update + merge simulado
 tests/test-mcp-write-protocol.sh     # Fase 2 -- propose_decision via MCP real + el guard
+tests/test-ingestion.sh              # Fase 3 -- pipeline completo, dedup, umbral, seguridad
 ```
 
 ## Principios (resumen; el detalle completo esta en la especificacion)

@@ -1,0 +1,64 @@
+{
+  "candidates": [
+    {
+      "entry_type": "decision",
+      "title": "Usar Postgres en vez de DynamoDB para el modulo de reporting",
+      "confidence": "FACT",
+      "evidence": [
+        {
+          "source": "meeting",
+          "ref": "fixtures/ingestion/2026-09-08-kickoff.raw.txt",
+          "locator": "[00:03:40] Maria: Decidimos usar Postgres para el modulo de reporting, no DynamoDB."
+        }
+      ],
+      "body": "El cliente (Maria, PO) confirmo la decision ya charlada con su equipo de datos: Postgres en vez de DynamoDB, por la necesidad de joins complejos entre ventas y usuarios que en DynamoDB obligarian a desnormalizar todo.",
+      "tags": ["arquitectura", "storage"],
+      "decided_by": ["maria@cliente.com"]
+    },
+    {
+      "entry_type": "requirement",
+      "title": "SSO con Okta para el lanzamiento (no bloqueante para el sprint actual)",
+      "confidence": "FACT",
+      "evidence": [
+        {
+          "source": "meeting",
+          "ref": "fixtures/ingestion/2026-09-08-kickoff.raw.txt",
+          "locator": "[00:07:55] Maria: SSO con Okta lo necesitamos si o si para el lanzamiento, pero puede esperar al sprint 3 -- no es bloqueante."
+        }
+      ],
+      "body": "Requisito confirmado por el cliente: SSO con Okta es necesario para el lanzamiento pero se resuelve en sprint 3, no bloquea el sprint actual.",
+      "tags": ["auth", "sprint-3"],
+      "resolution": "open",
+      "raised_by": ["carla@xmartlabs.com"]
+    },
+    {
+      "entry_type": "risk",
+      "title": "Dependencia de SendGrid para notificaciones puede perder eventos ante una caida",
+      "confidence": "FACT",
+      "evidence": [
+        {
+          "source": "meeting",
+          "ref": "fixtures/ingestion/2026-09-08-kickoff.raw.txt",
+          "locator": "[00:15:02] Maria: Sería bueno que quede anotado como riesgo, alto, para que no se nos escape."
+        }
+      ],
+      "body": "El conector de mail depende de SendGrid, que tuvo caidas largas en el pasado. Si se cae durante un pico de reportes mensuales, se podrian perder notificaciones importantes para el cliente. Mitigacion todavia sin definir.",
+      "tags": ["notificaciones", "disponibilidad"],
+      "severity": "high",
+      "owner": ["carla@xmartlabs.com"]
+    }
+  ],
+  "open_questions": [
+    {
+      "question": "El cliente podria querer migrar a otro proveedor de cloud el proximo año -- sin confirmar todavia (la propia Maria aclaro que era un comentario al pasar, no algo definido).",
+      "evidence": [
+        {
+          "source": "meeting",
+          "ref": "fixtures/ingestion/2026-09-08-kickoff.raw.txt",
+          "locator": "[00:22:30] Maria: No tengo nada confirmado sobre eso todavia, fue mas un comentario mio pensando en voz alta. No lo tomen como definido."
+        }
+      ]
+    }
+  ],
+  "security_findings": []
+}

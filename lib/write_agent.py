@@ -9,8 +9,11 @@ contra la maquina de estados (schemas/entry-state-machine.json), y la propone co
 Context Base via adapters/git_provider.py. Nunca mergea, nunca escribe directo a la
 rama que estaba checked-out (regla dura de adapters/CONTRACT.md).
 
-Dos operaciones (seccion 8.1):
+Operaciones (seccion 8.1 + generalizacion de Fase 3 para el pipeline de ingesta):
+  propose_new_entry(repo_root, knowledge_dir, entry_type, payload) -> Receipt
+    (entry_type en {"decision", "requirement", "risk"})
   propose_decision(repo_root, knowledge_dir, payload) -> Receipt
+    (wrapper de propose_new_entry(..., "decision", ...), por compatibilidad con el tool MCP)
   propose_update(repo_root, knowledge_dir, entry_id, payload) -> Receipt
 
 'status' en la entrada propuesta refleja lo que quien pidio el registro ya afirmo
@@ -115,13 +118,34 @@ def _next_id(knowledge_dir: Path, entry_type: str) -> str:
     return f"{prefix}-{max_n + 1:04d}"
 
 
-def propose_decision(repo_root: str | Path, knowledge_dir: str | Path, payload: dict[str, Any]) -> dict[str, Any]:
-    """Registra una decision nueva. payload:
+def propose_new_entry(
+    repo_root: str | Path, knowledge_dir: str | Path, entry_type: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Registra una entrada nueva de cualquiera de los tres tipos que se proponen "en frio"
+    (decision/requirement/risk -- system/meeting/glossary-term no tienen todavia un flujo de
+    propuesta conversacional, seccion 8.1). Generaliza lo que hasta Fase 2 vivia solo en
+    propose_decision, para que Fase 3 (lib/ingestion.py) pueda proponer requirements/risks
+    detectados durante la ingesta sin duplicar esta logica ni agregar nuevas operaciones MCP.
+
+    payload comun a los tres tipos:
       title (obl.), evidence (obl., lista, minimo 1), confidence (obl.),
       requested_by (obl. -- quien le pidio esto al asistente),
+      status, tags, date, body, context_ref (todos opcionales).
+    payload especifico de decision:
       decided_by (opcional -- si viene, status default 'confirmed'; si no, 'proposed'),
-      status, supersedes, tags, date, body, context_ref (todos opcionales).
+      supersedes (opcional).
+    payload especifico de requirement:
+      resolution (opcional, default 'open'), raised_by, depends_on (opcionales).
+    payload especifico de risk:
+      severity (OBLIGATORIO -- no hay severidad neutra que asumir por quien escribe),
+      owner, mitigated_by (opcionales).
     """
+    if entry_type not in ID_PREFIXES:
+        raise WriteAgentError(
+            f"tipo de entrada no soportado para propuesta nueva: {entry_type!r} "
+            f"(soportados: {sorted(ID_PREFIXES)})"
+        )
+
     knowledge_dir = Path(knowledge_dir).resolve()
     repo_root = Path(repo_root).resolve()
 
@@ -132,27 +156,49 @@ def propose_decision(repo_root: str | Path, knowledge_dir: str | Path, payload: 
     if not title:
         raise WriteAgentError("falta 'title'")
     if not evidence:
-        raise WriteAgentError("falta 'evidence' -- toda decision necesita al menos una cita (principio 3: evidencia o silencio)")
+        raise WriteAgentError(f"falta 'evidence' -- toda {entry_type} necesita al menos una cita (principio 3: evidencia o silencio)")
     if not confidence:
         raise WriteAgentError("falta 'confidence'")
     if not requested_by:
         raise WriteAgentError("falta 'requested_by' -- quien le pidio esto al asistente, para citarlo en el PR (seccion 5.2)")
 
-    decided_by = payload.get("decided_by") or []
-    status = payload.get("status") or ("confirmed" if decided_by else "proposed")
-
-    entry_id = _next_id(knowledge_dir, "decision")
+    entry_id = _next_id(knowledge_dir, entry_type)
     frontmatter: dict[str, Any] = {
         "id": entry_id,
-        "type": "decision",
-        "status": status,
+        "type": entry_type,
+        "status": None,
         "title": title,
         "date": payload.get("date") or date.today().isoformat(),
     }
-    if decided_by:
-        frontmatter["decided_by"] = decided_by
-    frontmatter["supersedes"] = payload.get("supersedes")
-    frontmatter["superseded_by"] = None
+
+    if entry_type == "decision":
+        decided_by = payload.get("decided_by") or []
+        status = payload.get("status") or ("confirmed" if decided_by else "proposed")
+        frontmatter["status"] = status
+        if decided_by:
+            frontmatter["decided_by"] = decided_by
+        frontmatter["supersedes"] = payload.get("supersedes")
+        frontmatter["superseded_by"] = None
+    elif entry_type == "requirement":
+        status = payload.get("status") or "proposed"
+        frontmatter["status"] = status
+        frontmatter["resolution"] = payload.get("resolution") or "open"
+        if payload.get("raised_by"):
+            frontmatter["raised_by"] = payload["raised_by"]
+        if payload.get("depends_on"):
+            frontmatter["depends_on"] = payload["depends_on"]
+    elif entry_type == "risk":
+        status = payload.get("status") or "proposed"
+        frontmatter["status"] = status
+        severity = payload.get("severity")
+        if not severity:
+            raise WriteAgentError("falta 'severity' -- todo riesgo necesita severidad explicita, no hay default neutro")
+        frontmatter["severity"] = severity
+        if payload.get("owner"):
+            frontmatter["owner"] = payload["owner"]
+        if payload.get("mitigated_by"):
+            frontmatter["mitigated_by"] = payload["mitigated_by"]
+
     frontmatter["evidence"] = evidence
     if payload.get("tags"):
         frontmatter["tags"] = payload["tags"]
@@ -162,11 +208,21 @@ def propose_decision(repo_root: str | Path, knowledge_dir: str | Path, payload: 
 
     errors = _validate_text(text)
     if errors:
-        raise WriteAgentError("la entrada propuesta no valida contra decision.schema.json:\n" + "\n".join(errors))
+        raise WriteAgentError(f"la entrada propuesta no valida contra {entry_type}.schema.json:\n" + "\n".join(errors))
 
     knowledge_rel = knowledge_dir.relative_to(repo_root)
-    rel_path = str(knowledge_rel / "decisions" / f"{entry_id}-{_slug(title)}.md")
-    return _submit(repo_root, entry_id, rel_path, text, requested_by, payload.get("context_ref"), status, extra_pr_lines=[])
+    rel_path = str(knowledge_rel / TYPE_SUBDIR[entry_type] / f"{entry_id}-{_slug(title)}.md")
+    return _submit(
+        repo_root, entry_id, rel_path, text, requested_by, payload.get("context_ref"),
+        frontmatter["status"], extra_pr_lines=[],
+    )
+
+
+def propose_decision(repo_root: str | Path, knowledge_dir: str | Path, payload: dict[str, Any]) -> dict[str, Any]:
+    """Registra una decision nueva. Ver propose_new_entry -- este wrapper existe para no romper
+    a quien ya llama propose_decision por nombre (el tool MCP propose_decision, los tests de
+    Fase 2), pero toda la logica vive en la version generalizada."""
+    return propose_new_entry(repo_root, knowledge_dir, "decision", payload)
 
 
 def propose_update(repo_root: str | Path, knowledge_dir: str | Path, entry_id: str, payload: dict[str, Any]) -> dict[str, Any]:
