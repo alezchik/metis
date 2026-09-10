@@ -89,7 +89,12 @@ Para un conector que extrae de un formato binario (PDF, `.docx`, hoja de calculo
 en vez de leer texto plano, ver `docs/design/plan-ingesta-documentos.md` -- documenta el
 enfoque recomendado por tipo de archivo, incluyendo que dependencia nueva justifica cada
 uno (regla de arriba, "sin dependencias nuevas sin justificarlas") y cuando una falla de
-extraccion (no solo de fuente inalcanzable) tiene que ser explicita.
+extraccion (no solo de fuente inalcanzable) tiene que ser explicita.  Los cuatro ya
+implementados (`adapters/ingestion/document_file.py`, `pdf_file.py`,
+`spreadsheet_file.py`, `image_file.py`, `docs/adr/0020`) sirven de referencia
+concreta ademas del plan -- en particular `IngestionExtractionError` (distinta de
+`IngestionProviderError`) y el campo opcional `extraction_notes` para declarar una
+falla parcial, ambos documentados en `adapters/ingestion/CONTRACT.md`.
 
 ## Agregar un conector de lectura en vivo (tracker/codigo)
 

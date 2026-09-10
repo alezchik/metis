@@ -363,14 +363,17 @@ marginal que inundar de PRs una cola que nadie va a revisar — un backlog de pr
 sería exactamente la misma divergencia entre "lo que el agente sabe" y "lo que la persona mantiene" que
 todo este proyecto existe para cerrar.
 
-**Conectores de documentos (docs/PDF/Excel/imagenes).** Ampliacion del pipeline mas alla
-de reuniones, decidida y planeada en `docs/adr/0015-conectores-documentos-sin-persistencia-de-crudo.md`
-y `docs/design/plan-ingesta-documentos.md` -- video explicitamente fuera de alcance, con dos
+**Conectores de documentos (docs/PDF/Excel/imagenes) — implementado.** Ampliacion del pipeline
+mas alla de reuniones (`docs/adr/0015-conectores-documentos-sin-persistencia-de-crudo.md`,
+`docs/adr/0020-implementacion-ingesta-documentos.md`, `docs/design/plan-ingesta-documentos.md`):
+cuatro conectores nuevos (`adapters/ingestion/document_file.py`, `pdf_file.py`,
+`spreadsheet_file.py`, `image_file.py`) -- video explicitamente fuera de alcance, con dos
 diferencias respecto al parrafo de "Captura cruda" de arriba: una falla de extraccion (contenido
-no legible aunque la fuente si este disponible) tiene que ser tan explicita como una fuente
-inalcanzable, y estos conectores no persisten el archivo original en el store de Context
-Assistant en absoluto -- mas estricto que "destilado en el repo, crudo fuera de git" (principio 4),
-justificado en el ADR.
+no legible aunque la fuente si este disponible) es tan explicita como una fuente inalcanzable
+(`IngestionExtractionError`), y estos conectores no persisten el archivo original en el store de
+Context Assistant en absoluto -- mas estricto que "destilado en el repo, crudo fuera de git"
+(principio 4), justificado en el ADR. La destilacion de estas cuatro fuentes queda fuera de este
+alcance -- solo se implemento el lado de captura (`fetch_raw`).
 
 ---
 
@@ -589,7 +592,7 @@ necesitar escalar a humano.
 | Confidencialidad de transcripts/mails crudos | Nunca entran a git; viven en el store de Context Assistant con su propio control de acceso, citados por locator (§6) |
 | Contenido sensible/PII en el **destilado** (no solo el riesgo del crudo, fila anterior) | Regla de "Diet" en `skills/metis-ingest-meeting/SKILL.md` al mismo nivel que la de inyección de instrucciones + red mecánica `scan_for_sensitive_content` -- `sensitive_content_findings`/`sensitive_content_review_required` frena toda la corrida hasta revisión humana (`docs/adr/0018`) |
 | Ubicación y control de acceso real del store de capturas crudas | `ingestion.capture_store_dir` obligatorio (fuera del repo, verificado por `lib/ingestion.py::resolve_capture_store_dir`), directorio `0700`/archivos `0600`, wireado de punta a punta por `scripts/ingest-capture.sh` + `scripts/run-ingestion-pipeline.sh` (`docs/adr/0018`) -- cifrado a nivel de campo queda como pregunta abierta, no como hueco silencioso |
-| Falla de extracción silenciosa en conectores de documentos/PDF/Excel/imágenes (contenido no legible, pero informado como si se hubiese extraído todo) | Regla nueva y explícita en `adapters/ingestion/CONTRACT.md` (`docs/adr/0015`): toda falla de extracción, total o parcial, levanta una excepción declarada -- nunca un `RawCapture` vacío o incompleto sin marcar |
+| Falla de extracción silenciosa en conectores de documentos/PDF/Excel/imágenes (contenido no legible, pero informado como si se hubiese extraído todo) | Implementado (`docs/adr/0015`, `docs/adr/0020`): `IngestionExtractionError` explícito en los cuatro conectores (`adapters/ingestion/document_file.py`, `pdf_file.py`, `spreadsheet_file.py`, `image_file.py`); una falla parcial se declara en `extraction_notes` -- nunca un `RawCapture` vacío o incompleto sin marcar |
 | Video como fuente de ingesta | Explícitamente fuera de alcance (`docs/adr/0015`) -- ningún formato de video se procesa, ni frames ni audio |
 | Cachear el estado de un ticket/PR externo como si fuera un hecho propio (y que quede desactualizado si algo cambia del otro lado) | Prohibido explícitamente (`docs/adr/0016`, implementado en `lib/audit.py::audit_gaps`, `docs/adr/0019`) -- solo se guarda cita histórica en `evidence`, el estado actual siempre se consulta en vivo al tracker/código |
 | La auditoría de brechas (tracker/código) queda inutilizable para un cliente sin Dédalo/Talos desplegados | `docs/adr/0016` -- la capacidad vive 100% del lado de Metis, con su propia interfaz mínima (`scripts/audit-gaps.sh` + reporte Markdown), nunca depende de las otras dos piezas del ecosistema |

@@ -1,9 +1,11 @@
 # Plan de implementación — ingesta de documentos (docs, PDF, Excel, imágenes)
 
-Fecha: 2026-09-09. Estado: borrador aceptado, sin código todavía. Formaliza la decisión de
+Fecha: 2026-09-09. **Estado: implementado (2026-09-10, `docs/adr/0020`).** Formaliza la decisión de
 `docs/adr/0015-conectores-documentos-sin-persistencia-de-crudo.md` — este documento tiene el detalle
 que ese ADR deja afuera a propósito (para no tocarlo si algo de acá cambia de opinión sin cambiar la
-decisión de fondo).
+decisión de fondo). Las cuatro preguntas abiertas de la sección 4 quedaron resueltas al implementar,
+siguiendo en los cuatro casos la recomendación que este documento ya dejaba escrita — ver
+`docs/adr/0020` para el detalle de cada una.
 
 ## 0. Qué resuelve esto y qué no
 
@@ -80,6 +82,10 @@ usa `http.server` de la stdlib a propósito, sin dependencias nuevas sin justifi
 **Recomendación:** sumar las tres, cada una en el PR del conector que la necesita — un PR chico agrega
 una dependencia chica, en vez de un PR grande que agregue las tres de una.
 
+**Resuelto (`docs/adr/0020`):** se sumaron `python-docx`, `pypdf` y `openpyxl` como estaba recomendado,
+más `pillow`/`pytesseract` para el conector de imágenes (no contempladas explícitamente en esta
+sección original, pero mismo criterio de "una dependencia chica por conector que la necesita").
+
 ### 4.2 Evidencia para hojas de cálculo
 
 El modelo de evidencia actual (`evidence[].locator` en todos los schemas) asume una cita textual — una
@@ -93,6 +99,11 @@ celda o un rango de un Excel no es "una cita" de la misma forma. Dos caminos:
 
 **Recomendación:** (b), documentando la convención en `adapters/ingestion/CONTRACT.md` cuando se
 implemente, sin cambiar ningún schema.
+
+**Resuelto (`docs/adr/0020`):** se implementó (b) tal como estaba recomendado — la convención
+`<archivo>#<hoja>!<rango>` queda documentada en `adapters/ingestion/CONTRACT.md`. `spreadsheet_file.py`
+serializa además cada hoja como texto tabular completo para el `raw_text` del `RawCapture` (necesario
+de cualquier forma, independiente de la convención de cita elegida).
 
 ### 4.3 Extracción de imágenes: ¿OCR o descripción con modelo de visión?
 
@@ -113,12 +124,21 @@ Dos enfoques con implicancias de arquitectura distintas, no solo de calidad:
 coherente con el resto del contrato — y dejar la descripción por visión como extensión explícita de una
 fase futura, si se decide que hace falta. No bloquea nada de lo demás de este plan.
 
+**Resuelto (`docs/adr/0020`):** se implementó OCR puro (`pytesseract` + Pillow) tal como estaba
+recomendado. Una imagen sin texto reconocido se declara explícito como resultado válido (no un error)
+vía el campo `extraction_notes` — ver la sección 2 de este documento y `adapters/ingestion/CONTRACT.md`.
+Descripción por modelo de visión sigue sin implementar, como extensión explícita de una fase futura.
+
 ### 4.4 Enum de `source` en los schemas
 
 `schemas/*.schema.json` ya tiene `document` en el enum de `evidence.source` — sirve tal cual para
 Word/PDF/`.txt`/`.md`. No tiene un valor para hojas de cálculo ni imágenes. Agregar `spreadsheet` e
 `image` al enum es un cambio de contrato de schema (`CONTRIBUTING.md`, "cuándo tu cambio necesita un
 ADR") — se decide y se documenta cuando se implemente el conector correspondiente, no en este plan.
+
+**Resuelto (`docs/adr/0020`):** `spreadsheet` e `image` se agregaron al enum de `evidence.source` en
+los seis schemas de entrada más `schemas/ingestion-candidate.schema.json` (y sus copias instaladas en
+`fixtures/contextbase/.contextbase/schema/`).
 
 ## 5. Destilación
 
@@ -129,22 +149,24 @@ la misma regla de contenido sensible/PII que ya bloquea la ingesta de reuniones 
 PRD o una captura de pantalla puede citar exactamente el mismo tipo de dato personal que una
 transcripción. Ese bloqueo aplica automáticamente acá también.
 
-## 6. Fases de implementación propuestas
+## 6. Fases de implementación — completas
 
-1. **Documentos de texto** (`.docx`/`.txt`/`.md`) — reutiliza casi 1:1 el patrón de `meeting_file.py`,
-   el conector más simple. Buen primer piloto de este plan.
-2. **PDF.**
-3. **Excel/CSV** — depende de resolver 4.2.
-4. **Imágenes** — depende de resolver 4.3, la más distinta arquitectónicamente de las cuatro.
+1. **Documentos de texto** (`.docx`/`.txt`/`.md`) — `adapters/ingestion/document_file.py`. **Implementado.**
+2. **PDF.** — `adapters/ingestion/pdf_file.py`. **Implementado.**
+3. **Excel/CSV** — `adapters/ingestion/spreadsheet_file.py`. **Implementado.**
+4. **Imágenes** — `adapters/ingestion/image_file.py`. **Implementado.**
 
-Cada fase: un conector nuevo bajo `adapters/ingestion/`, sin persistencia de crudo (sección 3), con
-`IngestionExtractionError` explícito (sección 2), tests herméticos con fixtures nuevas bajo
-`fixtures/ingestion/` (mismo patrón que ya usa `meeting_file.py`), y su propio PR. No hace falta un ADR
-por cada fase salvo que alguna de las decisiones abiertas de la sección 4 termine resolviéndose distinto
-de lo recomendado acá.
+Las cuatro se implementaron en una sola sesión (no en PRs separados como sugería este plan
+originalmente) siguiendo el mismo patrón en las cuatro: sin persistencia de crudo (sección 3), con
+`IngestionExtractionError` explícito (sección 2), y tests herméticos que construyen sus propios
+archivos descartables en el momento en vez de fixtures binarias comiteadas
+(`tests/test-document-ingestion.py`). Un único ADR de implementación (`docs/adr/0020`) cubre las cuatro,
+en vez de uno por fase, porque las cuatro decisiones de la sección 4 se resolvieron todas siguiendo la
+recomendación ya escrita acá — no hubo ninguna que se apartara de lo planeado.
 
 ## Referencias
 
 `docs/adr/0015-conectores-documentos-sin-persistencia-de-crudo.md`,
+`docs/adr/0020-implementacion-ingesta-documentos.md`,
 `adapters/ingestion/CONTRACT.md`, `docs/design/spec-tecnica-funcional.md` (secciones 6 y 14),
 `ROADMAP.md`.

@@ -100,10 +100,65 @@ Implementacion de referencia: `adapters/ingestion/meeting_file.py`.
 
 ## Conectores que no persisten su captura (`docs/adr/0015`)
 
-Los conectores de documentos/PDF/hojas de calculo/imagenes (planeados en
-`docs/design/plan-ingesta-documentos.md`, todavia sin implementar) siguen este mismo
-contrato con una diferencia deliberada: ninguno de ellos, ni el codigo que orquesta su
-corrida, llama a `lib/ingestion.py::save_capture`. El archivo original se lee, se extrae
-su texto, y se descarta -- sin copia propia en el store de Context Assistant. Ver
+Los conectores de documentos/PDF/hojas de calculo/imagenes siguen este mismo contrato
+con una diferencia deliberada: ninguno de ellos, ni el codigo que orquesta su corrida,
+llama a `lib/ingestion.py::save_capture`. El archivo original se lee, se extrae su
+texto, y se descarta -- sin copia propia en el store de Context Assistant. Ver
 `docs/adr/0015` para el porque. Video queda explicitamente fuera de alcance de esta
 familia de conectores, en cualquier formato.
+
+Los cuatro implementados (`docs/design/plan-ingesta-documentos.md`):
+
+- **`document_file.py`** -- `.docx` (via `python-docx`), `.txt`, `.md`. `source`:
+  `document`.
+- **`pdf_file.py`** -- texto de la capa de texto, pagina por pagina (via `pypdf`).
+  `source`: `document`.
+- **`spreadsheet_file.py`** -- `.xlsx` (via `openpyxl`) y `.csv` (stdlib). `source`:
+  `spreadsheet`.
+- **`image_file.py`** -- OCR puro sobre `.png`/`.jpg`/`.jpeg`/`.webp` (via
+  `pytesseract` + Pillow, requiere el binario `tesseract` del sistema). `source`:
+  `image`. Deliberadamente sin descripcion por modelo de vision (`docs/adr/0015`
+  seccion 4.3) -- un conector de ingesta no juzga, solo lee.
+
+## `IngestionExtractionError` (regla 6, `docs/adr/0015`)
+
+Cada uno de los cuatro conectores de arriba define su propia clase
+`IngestionExtractionError(RuntimeError)`, hermana local de `IngestionProviderError`
+(mismo patron que ya usan `TrackerProviderError`/`CodeProviderError`: una clase de
+error por archivo de conector, nunca una base compartida importada). Se levanta
+cuando la fuente SI esta disponible pero su contenido no se puede extraer de forma
+legible -- password/proteccion, formato corrupto, PDF sin capa de texto y sin OCR.
+Distinta de `IngestionProviderError` (fuente inalcanzable): esa se levanta cuando el
+archivo ni siquiera se puede abrir/leer.
+
+**Excepcion deliberada -- imagen sin texto reconocido.** OCR sobre una imagen sin
+texto (un diagrama a mano, una foto sin texto) es un resultado VALIDO, no una falla
+de extraccion -- `image_file.py` no levanta `IngestionExtractionError` en ese caso,
+devuelve un `RawCapture` con `raw_text` vacio y lo declara en `extraction_notes`
+(ver abajo). La regla 6 exige declarar explicito, no exige tratarlo siempre como
+error.
+
+## Campo `extraction_notes` (extension aditiva de `RawCapture`, `docs/adr/0015`)
+
+Los cuatro conectores de esta familia pueden agregar una clave opcional
+`extraction_notes: list[str]` al `RawCapture` que devuelven -- no rompe el contrato
+para conectores que no la usan (`meeting_file.py` nunca la agrega). Se usa para
+declarar, siempre explicito y nunca en silencio (regla 6):
+
+- una falla PARCIAL de extraccion (ej. "pagina 4 de 10 no se pudo leer", "hoja
+  'Q3' protegida, omitida") cuando el resto de la fuente si se pudo extraer, y
+- el caso de imagen sin texto reconocido descripto arriba.
+
+Una extraccion total exitosa, sin nada que declarar, no necesita la clave (o la
+trae vacia) -- `extraction_notes` nunca es un lugar para meter contenido, solo para
+declarar que falto algo.
+
+## Convencion de locator para hojas de calculo (`docs/adr/0015` seccion 4.2)
+
+El `locator` del `RawCapture` de `spreadsheet_file.py` sigue siendo el path estable
+al archivo completo (igual que los demas conectores) -- la convencion de abajo es
+para cuando la DESTILACION cite una celda o rango especifico como evidencia
+(`evidence[].locator` en los schemas de entrada, que ya es un string libre, sin
+cambio de schema necesario): `<archivo>#<hoja>!<rango>`, por ejemplo
+`plan.xlsx#Presupuesto!A1:C4`. Un CSV, al no tener multiples hojas, omite el nombre
+de hoja: `datos.csv#A1:C4`.

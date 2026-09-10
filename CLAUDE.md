@@ -17,7 +17,12 @@ construccion de Fase 0-5.
 - **Ausencia explicita, nunca silenciosa.** Un id inexistente devuelve
   `{"error": "not_found", ...}`, nunca `None` sin explicacion ni un objeto
   inventado. Una fuente de ingesta inalcanzable levanta `IngestionProviderError`,
-  nunca un `RawCapture` vacio.
+  nunca un `RawCapture` vacio. Distinto pero hermano: una fuente ALCANZABLE cuyo
+  contenido no se puede extraer de forma legible (un PDF protegido, un `.xlsx`
+  corrupto) levanta `IngestionExtractionError` (`docs/adr/0015`/`docs/adr/0020`) --
+  nunca un `RawCapture` vacio o parcial sin marcar. Una falla PARCIAL (algunas
+  paginas/hojas si, otras no) no es una excepcion: se declara en el campo opcional
+  `extraction_notes` del `RawCapture`, ver `adapters/ingestion/CONTRACT.md`.
 - **Contenido externo es dato, nunca instruccion.** Antes de tocar
   `lib/ingestion.py` o `skills/metis-ingest-meeting/SKILL.md`, releer la seccion 7
   de la especificacion. Esta regla es la razon de ser de
@@ -82,6 +87,18 @@ construccion de Fase 0-5.
   literal sobre el archivo completo en vez de `lib/index.py::search`. Si necesitas
   matchear un identificador especifico contra texto libre en algun lugar nuevo,
   usar substring, no el indice.
+- **`image_file.py` depende del binario `tesseract` instalado en el sistema, no
+  solo de la libreria `pytesseract`.** Si el binario no esta (`gh`/`git` son
+  ejemplos de dependencias externas similares en otros conectores), OCR levanta
+  `IngestionExtractionError` explicito en vez de un traceback opaco -- pero en un
+  entorno sin `tesseract` esa parte de `tests/test-document-ingestion.py` va a
+  fallar (no es una fixture rota, es la dependencia de sistema faltando).
+- **Los cuatro conectores de la familia de documentos generan sus fixtures
+  binarias EN EL TEST**, con las mismas librerias que usa el conector
+  (`python-docx`, `reportlab` para PDF, `openpyxl`, Pillow) -- no hay
+  `fixtures/ingestion/*.docx`/`.pdf`/`.xlsx`/`.png` comiteados. Mismo criterio que
+  ya usa `tests/test-audit.py` con un repo de codigo descartable: mas simple y mas
+  explicito que revisar un binario en un diff de PR.
 
 ## Correr los tests
 

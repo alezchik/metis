@@ -66,6 +66,17 @@
   (que tracker primero, el enum `source` nuevo, como leer codigo) en
   `docs/adr/0019`. Probado (`tests/test-audit.sh`, ampliacion de
   `tests/test-mcp-protocol.sh` y `tests/test-api-server.sh`).
+- **Ingesta de documentos (docs/PDF/Excel/imagenes).** Cuatro conectores nuevos bajo
+  `adapters/ingestion/` -- `document_file.py` (`.docx`/`.txt`/`.md`), `pdf_file.py`
+  (texto por pagina via `pypdf`), `spreadsheet_file.py` (`.xlsx`/`.csv`, serializado
+  tabular hoja por hoja) e `image_file.py` (OCR puro via `pytesseract`) -- siguen el
+  mismo contrato que `meeting_file.py` (`fetch_raw -> RawCapture`) con dos reglas
+  nuevas del contrato (`docs/adr/0015`): `IngestionExtractionError` explicito
+  cuando la fuente esta disponible pero no se puede extraer de forma legible, y
+  ninguno persiste el crudo original (nunca llaman a `save_capture`). Enum
+  `evidence.source` gana `spreadsheet` e `image`. Video queda explicitamente fuera
+  de alcance, en cualquier formato. Decisiones de implementacion en
+  `docs/adr/0020`. Probado (`tests/test-document-ingestion.sh`).
 
 ## Huecos conocidos (no bloqueantes)
 
@@ -151,25 +162,23 @@ Dedalo/Talos -- el contrato ya esta documentado (`docs/design/frontera-ecosistem
 `docs/handoff/integracion-dedalo.md` e `integracion-talos.md`. Implementarlo
 requiere tocar esos dos repos, separados de este.
 
-## Proximo hito: ingesta de documentos (docs, PDF, Excel, imagenes)
+## Resuelto: ingesta de documentos (`docs/adr/0015`, `docs/adr/0020`)
 
-Decidido y planeado (`docs/adr/0015-conectores-documentos-sin-persistencia-de-crudo.md`,
-`docs/design/plan-ingesta-documentos.md`), sin codigo todavia. Amplia el pipeline de
-ingesta mas alla del unico conector implementado hoy (reuniones) a cuatro familias de
-archivo: documentos de texto (Word/`.txt`/`.md`), PDF, hojas de calculo (Excel/CSV) e
-imagenes. Puntos ya resueltos por el ADR, no abiertos a discusion en la implementacion:
+Ver la entrada correspondiente en "Hecho" arriba. Los dos requisitos centrales de
+`docs/adr/0015` se cumplen tal como se decidieron: falla de extraccion siempre
+explicita (`IngestionExtractionError`, nunca un `RawCapture` vacio o parcial sin
+marcar) y sin persistencia del crudo original (ninguno de los cuatro conectores
+llama a `save_capture`). Video sigue explicitamente fuera de alcance. Las cuatro
+preguntas de diseno que quedaban abiertas (dependencias, evidencia para hojas de
+calculo, OCR vs. modelo de vision, enum de `source`) se resolvieron al implementar,
+siguiendo en los cuatro casos la recomendacion que ya dejaba escrita
+`docs/design/plan-ingesta-documentos.md` -- ver `docs/adr/0020` y la seccion 4
+(actualizada) de ese plan.
 
-- **Video explicitamente fuera de alcance** -- ningun formato, ni frames ni audio.
-- **Falla de extraccion siempre explicita** -- distinta de "fuente inalcanzable" (regla 3
-  ya existente): contenido no legible, aunque la fuente si este disponible, levanta un
-  error explicito, nunca un `RawCapture` vacio o parcial sin marcar.
-- **Sin persistencia del crudo original** -- mas estricto que el principio 4 vigente para
-  reuniones: estos conectores nunca llaman a `save_capture`, el archivo original se lee,
-  se extrae su texto, y se descarta.
-
-Preguntas de diseno todavia abiertas (documentadas en el plan, no bloquean arrancar):
-evidencia para hojas de calculo, OCR vs. modelo de vision para imagenes, y el enum de
-`source` nuevo (`spreadsheet`/`image`) en los schemas.
+La destilacion de estas cuatro fuentes (un rol agentico propio o una generalizacion
+de `skills/metis-ingest-meeting/SKILL.md`) queda, a proposito, fuera de este
+alcance -- solo se implemento el lado `fetch_raw` de las cuatro familias
+(`docs/design/plan-ingesta-documentos.md` seccion 5).
 
 ## Proponer un cambio a este roadmap
 

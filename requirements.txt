@@ -3,3 +3,12 @@
 pyyaml>=6.0
 jsonschema>=3.2
 mcp>=2.0
+
+# Conectores de ingesta de documentos (docs/adr/0015, Fases A-D). Cada dependencia
+# la agrega solo el conector que la necesita -- CSV no necesita nada nuevo (csv de
+# la stdlib).
+python-docx>=1.1   # document_file.py (.docx)
+pypdf>=4.0          # pdf_file.py
+openpyxl>=3.1       # spreadsheet_file.py (.xlsx)
+pillow>=10.0        # image_file.py (decodificar la imagen)
+pytesseract>=0.3    # image_file.py (OCR) -- requiere ademas el binario 'tesseract' instalado en el sistema

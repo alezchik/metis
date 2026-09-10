@@ -59,6 +59,16 @@ de esa integracion vive del lado de los repos `talosprd`/`talos`, no de este.
 consulta (nunca cachea el resultado, `docs/adr/0016`/`docs/adr/0019`) -- funciona
 sin Dedalo ni Talos desplegados, via MCP/API o el script standalone
 `scripts/audit-gaps.sh`.
+**Ingesta de documentos (docs/PDF/Excel/imagenes, `docs/adr/0015`/`docs/adr/0020`):**
+cuatro conectores nuevos bajo `adapters/ingestion/` -- `document_file.py`
+(`.docx`/`.txt`/`.md`), `pdf_file.py`, `spreadsheet_file.py` (`.xlsx`/`.csv`) e
+`image_file.py` (OCR puro) -- amplian la ingesta mas alla de reuniones, siguiendo
+el mismo contrato (`fetch_raw -> RawCapture`) con dos reglas nuevas: falla de
+extraccion explicita (`IngestionExtractionError`, distinta de fuente inalcanzable)
+y sin persistencia del crudo original (ninguno llama a `save_capture`). La
+destilacion de estas cuatro fuentes (un rol agentico propio o una generalizacion
+de `skills/metis-ingest-meeting/SKILL.md`) queda fuera de este alcance -- ver
+`docs/adr/0020`.
 
 ## Estructura del repo
 
@@ -88,6 +98,10 @@ adapters/
   ingestion/
     CONTRACT.md            contrato de conectores de ingesta (fetch_raw -> RawCapture)
     meeting_file.py         conector "meeting_file": transcripcion en disco (Fase 3)
+    document_file.py        conector de documentos: .docx/.txt/.md (docs/adr/0015/0020)
+    pdf_file.py              conector de PDF: texto por pagina, via pypdf (docs/adr/0015/0020)
+    spreadsheet_file.py      conector de hojas de calculo: .xlsx/.csv (docs/adr/0015/0020)
+    image_file.py            conector de imagenes: OCR puro via pytesseract (docs/adr/0015/0020)
   tracker/
     CONTRACT.md            contrato de conectores de tracker (find_related/get_status)
     file_tracker.py         conector de referencia: tickets en un JSON local (Fase 6)
@@ -115,6 +129,7 @@ tests/
   test-ingestion.sh             Fase 3+4: pipeline completo, dedup, umbral, seguridad, contradiccion
   test-api-server.sh            Fase 4+6: las 7 operaciones via HTTP real + auth por API key
   test-audit.sh                 Fase 6: conectores tracker/codigo + audit_gaps de punta a punta
+  test-document-ingestion.sh    Ingesta de documentos: document_file/pdf_file/spreadsheet_file/image_file
 docs/
   design/            los tres documentos de diseno (fuente de verdad)
   adr/               decisiones de arquitectura tomadas durante la construccion
@@ -277,6 +292,47 @@ lo resuelve un humano revisando el PR. Ver `fixtures/ingestion/2026-09-22-follow
 para el caso de ejemplo (una reunion de seguimiento que contradice la decision del
 kickoff).
 
+## Ingesta de documentos (docs/PDF/Excel/imagenes -- `docs/adr/0015`/`docs/adr/0020`)
+
+```bash
+python3 -c "
+from adapters.ingestion.document_file import fetch_raw as fetch_document
+from adapters.ingestion.pdf_file import fetch_raw as fetch_pdf
+from adapters.ingestion.spreadsheet_file import fetch_raw as fetch_spreadsheet
+from adapters.ingestion.image_file import fetch_raw as fetch_image
+
+# Cada uno devuelve el mismo RawCapture (adapters/ingestion/CONTRACT.md) -- lo que
+# cambia es 'source' (document/spreadsheet/image) y como se extrae raw_text.
+capture = fetch_document('un-prd.docx')
+"
+```
+
+Cuatro conectores nuevos, mismo contrato que `meeting_file.py`
+(`fetch_raw(path) -> RawCapture`), con dos diferencias deliberadas
+(`docs/adr/0015`): nunca persisten el crudo original (nunca llaman a
+`lib/ingestion.save_capture` -- el archivo se lee, se extrae su texto, y se
+descarta), y pueden levantar `IngestionExtractionError` -- distinta de
+`IngestionProviderError` -- cuando la fuente SI esta disponible pero su contenido
+no se puede extraer de forma legible (un PDF protegido, un `.xlsx` corrupto, un
+`.docx` que la libreria no reconoce). Una falla PARCIAL (una pagina de un PDF sin
+texto, una hoja de un Excel vacia) no rompe la corrida -- queda declarada explicita
+en la clave opcional `extraction_notes` del `RawCapture`.
+
+- `document_file.py` -- `.docx` (via `python-docx`), `.txt`, `.md`.
+- `pdf_file.py` -- texto de la capa de texto, pagina por pagina (via `pypdf`).
+- `spreadsheet_file.py` -- `.xlsx` (via `openpyxl`) y `.csv` (stdlib), serializado
+  como texto tabular hoja por hoja. Convencion de locator para citar una celda
+  especifica: `<archivo>#<hoja>!<rango>` (ver `adapters/ingestion/CONTRACT.md`).
+- `image_file.py` -- OCR puro sobre `.png`/`.jpg`/`.jpeg`/`.webp` (via
+  `pytesseract` + Pillow, requiere el binario `tesseract` del sistema).
+  Deliberadamente sin modelo de vision (`docs/adr/0015` seccion 4.3). Una imagen
+  sin texto reconocido es un resultado VALIDO (no un error), declarado en
+  `extraction_notes`.
+
+Video queda explicitamente fuera de alcance, en cualquier formato. Decisiones de
+implementacion (dependencias elegidas, convencion de locator, `extraction_notes`,
+enum `source` nuevo) en `docs/adr/0020`.
+
 ## Auditoria de brechas (Fase 6 -- tracker+codigo en vivo, `docs/adr/0016`)
 
 ```bash
@@ -314,6 +370,7 @@ tests/test-mcp-write-protocol.sh     # Fase 2 -- propose_decision via MCP real +
 tests/test-ingestion.sh              # Fase 3+4 -- pipeline completo, dedup, umbral, seguridad, contradiccion
 tests/test-api-server.sh             # Fase 4+6 -- las 7 operaciones via HTTP real + auth por API key
 tests/test-audit.sh                  # Fase 6 -- conectores tracker/codigo + audit_gaps de punta a punta
+tests/test-document-ingestion.sh     # Ingesta de documentos -- document_file/pdf_file/spreadsheet_file/image_file
 ```
 
 ## Principios (resumen; el detalle completo esta en la especificacion)
