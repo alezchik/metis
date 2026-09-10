@@ -86,7 +86,10 @@ construccion de Fase 0-5.
   pego con esto (ver `docs/adr/0019`) y lo resolvio con busqueda de substring
   literal sobre el archivo completo en vez de `lib/index.py::search`. Si necesitas
   matchear un identificador especifico contra texto libre en algun lugar nuevo,
-  usar substring, no el indice.
+  usar substring, no el indice. (Nota 2026-09-10: `docs/adr/0021` propone reemplazar el indice
+  lexical por embeddings -- cuando eso se implemente, este gotcha especifico deja de aplicar a
+  `search_knowledge`, pero el criterio de fondo -- substring exacto para matchear un id
+  especifico contra texto libre -- sigue valiendo para cualquier lookup por id.)
 - **`image_file.py` depende del binario `tesseract` instalado en el sistema, no
   solo de la libreria `pytesseract`.** Si el binario no esta (`gh`/`git` son
   ejemplos de dependencias externas similares en otros conectores), OCR levanta
@@ -99,6 +102,12 @@ construccion de Fase 0-5.
   `fixtures/ingestion/*.docx`/`.pdf`/`.xlsx`/`.png` comiteados. Mismo criterio que
   ya usa `tests/test-audit.py` con un repo de codigo descartable: mas simple y mas
   explicito que revisar un binario en un diff de PR.
+
+- **Toda operacion que use el motor de IA (`docs/adr/0021`/`0022`, propuesta, no implementado
+  todavia) tiene que declarar `deterministic: false` y nunca proponer un resultado sin evidencia
+  puntual (archivo/linea/commit).** Ver `adapters/llm/CONTRACT.md`, reglas 1 y 2 -- esto es MAS
+  estricto que el resto de las reglas de evidencia del proyecto, no menos, porque el riesgo de
+  alucinacion de un LLM leyendo codigo es mayor que el de un grep o un indice lexical.
 
 - **`linear_issues.py` lee la API key de la variable de entorno `LINEAR_API_KEY`,
   nunca de `.contextbase/config.yaml`** (mismo criterio que `gh` ya autenticado

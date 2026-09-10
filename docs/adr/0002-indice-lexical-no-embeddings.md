@@ -1,7 +1,7 @@
 # ADR 0002 -- Indice lexical (TF-IDF liviano) para el MVP de Fase 1, no embeddings
 
 Fecha: 2026-09-09
-Estado: aceptada
+Estado: superseded by ADR-0021
 
 ## Contexto
 

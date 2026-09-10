@@ -56,3 +56,7 @@ nada mas, a `superseded by ADR-NNNN`.
 | [0018](0018-filtro-contenido-sensible-y-store-de-capturas.md) | Filtro de contenido sensible/PII en destilacion de reuniones + ubicacion y control de acceso reales del store de capturas |
 | [0019](0019-implementacion-auditoria-brechas.md) | Implementacion de la auditoria de brechas: conectores file/github/git_log, `tracker` en el enum de evidencia |
 | [0020](0020-implementacion-ingesta-documentos.md) | Implementacion de la ingesta de documentos: cuatro conectores nuevos, `spreadsheet`/`image` en el enum de evidencia |
+| [0021](0021-busqueda-semantica-supersede-indice-lexical.md) | Busqueda semantica (embeddings) reemplaza el indice lexical para search_knowledge y find_related -- propuesta, supersede a 0002 |
+| [0022](0022-evaluate-implementation-via-llm.md) | Operacion nueva evaluate_implementation: evaluar codigo via LLM bajo demanda, con evidencia obligatoria -- propuesta |
+| [0023](0023-superficie-red-saliente-proveedor-ia.md) | Metis gana superficie de red saliente hacia un proveedor de IA (o modelo local) -- propuesta |
+| [0024](0024-configuracion-dual-llm-externo-o-interno.md) | Configuracion dual del motor de IA: proveedor externo o modelo servido internamente -- propuesta |

@@ -70,6 +70,14 @@ destilacion de estas cuatro fuentes (un rol agentico propio o una generalizacion
 de `skills/metis-ingest-meeting/SKILL.md`) queda fuera de este alcance -- ver
 `docs/adr/0020`.
 
+**Propuesto, no implementado todavia (`docs/adr/0021`-`0024`):** motor de busqueda semantica
+(embeddings, reemplaza TF-IDF en `search_knowledge`/`find_related`) + operacion nueva
+`evaluate_implementation(requirement_id)` (evaluacion de codigo via LLM bajo demanda, con
+evidencia obligatoria, para el caso sin ticket previo). Requiere un motor de IA configurable
+(proveedor externo con API key propia del cliente, o servido internamente -- `adapters/llm/
+CONTRACT.md`, `docs/adr/0024`). Marcado como prerequisito del proximo piloto real -- ver
+`ROADMAP.md`.
+
 ## Estructura del repo
 
 ```

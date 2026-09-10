@@ -69,3 +69,12 @@ valido, no un error.
 
 Configuracion (`.contextbase/config.yaml`, seccion `code:`) en
 `docs/design/plan-auditoria-implementacion.md`.
+
+## Nota (2026-09-10, propuesta -- no implementado todavia)
+
+Este contrato (`find_related`/`get_status`) sigue dependiendo de un `ref` (id de ticket) para
+buscar en el historial -- sin ticket previo, no hay nada que grepear. `docs/adr/0022` propone
+`evaluate_implementation(requirement_id)` como complemento para ese caso: un rol agentico que lee
+codigo real (no un grep) y devuelve un veredicto con evidencia obligatoria (`adapters/llm/
+CONTRACT.md`). No reemplaza a este contrato -- el chequeo barato y deterministico de aca sigue
+siendo el primer intento.

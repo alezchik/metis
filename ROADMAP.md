@@ -154,9 +154,34 @@ desplegados. Las tres preguntas de diseno que quedaban abiertas se resolvieron a
 implementar -- ver `docs/adr/0019` y la seccion 8 (actualizada) de
 `docs/design/plan-auditoria-implementacion.md`.
 
+## Propuesto (bloquea el proximo piloto real): busqueda semantica + evaluacion de codigo via LLM
+
+Surge de revisar en detalle por que `audit_gaps()` puede fallar contra un proyecto real: el
+matching de `find_related()` (tracker) y de `search_knowledge()` es literal/lexical
+(`docs/adr/0002`) -- no reconoce un pedido en español contra un ticket en ingles, ni dos frases
+parafraseadas distinto. Y sin ticket previo, `audit_gaps()` no tiene forma de confirmar que algo
+ya esta implementado, porque el conector de codigo (`adapters/code/git_log.py`) solo busca un id
+literal en commits.
+
+Dos capacidades nuevas, ambas en estado `propuesta` (`docs/adr/0021`-`0024`), **prerequisito
+del piloto real, no posterior a el** -- la herramienta tiene que funcionar contra un proyecto que
+ya esta corriendo, no solo uno que arranca de cero:
+
+- **Motor de busqueda semantica (embeddings)**, reemplazando TF-IDF en `search_knowledge()` y
+  `find_related()` (`docs/adr/0021`).
+- **`evaluate_implementation(requirement_id)`**, evaluacion de codigo via LLM bajo demanda, con
+  evidencia obligatoria -- para el caso sin ticket previo (`docs/adr/0022`).
+
+Ambas necesitan un motor de IA configurable de dos formas (proveedor externo con API key propia
+del cliente, o servido internamente sin salir a terceros -- `docs/adr/0024`), lo que le agrega a
+Metis una superficie de red saliente que hoy no tiene (`docs/adr/0023`). Preguntas de negocio
+abiertas: quien paga la inferencia en produccion, y si el contenido que sale hacia un proveedor
+externo deberia pasar por el mismo filtro de contenido sensible/PII que ya existe para reuniones
+(`docs/adr/0018`).
+
 ## Proximo hito: un piloto real
 
-Todo lo de arriba se valido contra `fixtures/` -- un Context Base de mentira, una
+**Depende de la seccion anterior (busqueda semantica + evaluacion de codigo) estando implementada primero.** Todo lo de arriba se valido contra `fixtures/` -- un Context Base de mentira, una
 transcripcion de mentira. El proximo paso real es levantar un Context Base contra
 un proyecto real: un repo Git real del cliente, una API key real emitida para ese
 proyecto, un `ingestion.capture_store_dir` configurado para ese deployment, y

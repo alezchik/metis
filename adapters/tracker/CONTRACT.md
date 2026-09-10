@@ -97,3 +97,12 @@ excepcion que un llamador pueda confundir con "el tracker no esta disponible".
 Configuracion (`.contextbase/config.yaml`, seccion `tracker:`) en
 `scripts/contextbase-install.sh` (`config.yaml.example`) y
 `docs/design/plan-auditoria-implementacion.md`.
+
+## Nota (2026-09-10, propuesta -- no implementado todavia)
+
+`docs/adr/0021` propone reemplazar el matching por similitud de texto de `find_related()`
+(`difflib` en `file_tracker.py`, busqueda por keyword delegada en `github_issues.py`/
+`linear_issues.py`) por embeddings (`adapters/llm/CONTRACT.md`), para que un pedido en un idioma
+distinto al del tracker, o parafraseado distinto al titulo del ticket, igual encuentre el ticket
+correcto. El contrato de `find_related`/`get_status` de este archivo no cambia -- cambia
+unicamente el mecanismo de similitud interno.
