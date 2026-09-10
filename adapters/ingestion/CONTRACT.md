@@ -38,7 +38,11 @@ siempre devuelve el mismo `RawCapture`:
 - `raw_text`: el contenido completo tal cual vino de la fuente -- esto es justamente
   lo que **nunca** entra a git (principio 4, seccion 6: "destilado en el repo, crudo
   fuera de git"). Vive en el store de Context Assistant (`lib/ingestion.py:
-  save_capture`), nunca en `knowledge/`.
+  save_capture`), nunca en `knowledge/`. Donde vive ese store en un deployment real, y
+  con que control de acceso, esta resuelto en `docs/adr/0018` --
+  `ingestion.capture_store_dir` en `.contextbase/config.yaml`, siempre fuera del repo
+  Context Base (`lib/ingestion.py: resolve_capture_store_dir` lo verifica y falla
+  explicito si no).
 
   **Nota para fuentes no puramente textuales (`docs/adr/0015`).** Para un conector que
   extrae de un formato binario (PDF, `.docx`, hoja de calculo, imagen), `raw_text` es la

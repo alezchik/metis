@@ -249,6 +249,70 @@ def main() -> int:
         check("tambien se frena cuando la propia destilacion marca el hallazgo", result6["status"] == "security_review_required")
         check("se combinan los hallazgos declarados por la destilacion y los de la red mecanica", len(result6["security_findings"]) >= 2)
 
+        # --- contenido sensible/PII (docs/adr/0018): datos personales frenan la corrida
+        # igual que una instruccion incrustada, pero con un status distinto ---
+        sensitive_capture = {
+            "capture_id": "2026-09-10-datos-sensibles",
+            "source": "meeting",
+            "locator": "x",
+            "captured_at": "2026-09-10T00:00:00+00:00",
+            "raw_text": "Juan comento que su email personal es juan.perez@gmail.com y quedo en enviar el contrato.",
+            "content_hash": "abc",
+        }
+        check("la red mecanica de datos sensibles detecta el email en la transcripcion", len(ingestion.scan_for_sensitive_content(sensitive_capture["raw_text"])) > 0)
+
+        # caso 1: la propia destilacion no marco nada (la red mecanica es la que salva)
+        destilled_missed_pii = {
+            "candidates": [],
+            "open_questions": [],
+            "security_findings": [],
+            "sensitive_content_findings": [],
+        }
+        branches_before_pii = _branch_count(repo_root)
+        result9 = ingestion.run_pipeline(repo_root, knowledge_dir, sensitive_capture, destilled_missed_pii, requested_by="metis-ingestion:meeting_file")
+        check("la corrida se frena con status=sensitive_content_review_required aunque la destilacion no haya marcado nada", result9["status"] == "sensitive_content_review_required")
+        check("no se propone nada para una captura con datos sensibles", result9["proposed"] == [])
+        check("no se crean ramas nuevas cuando la corrida se frena por contenido sensible", _branch_count(repo_root) == branches_before_pii)
+        check("el hallazgo de contenido sensible cita el texto real", any("gmail.com" in f["quote"] for f in result9["sensitive_content_findings"]))
+        check("un hallazgo de seguridad no bloquea con el status de contenido sensible (son motivos distintos)", result9["security_findings"] == [])
+
+        # caso 2: la propia destilacion SI lo marco -- tambien frena, y no duplica el hallazgo
+        destilled_flagged_pii = {
+            "candidates": [],
+            "open_questions": [],
+            "security_findings": [],
+            "sensitive_content_findings": [
+                {"quote": "juan.perez@gmail.com", "category": "identidad", "note": "email personal citado en la reunion"}
+            ],
+        }
+        result10 = ingestion.run_pipeline(repo_root, knowledge_dir, sensitive_capture, destilled_flagged_pii, requested_by="metis-ingestion:meeting_file")
+        check("tambien se frena cuando la propia destilacion marca el hallazgo de contenido sensible", result10["status"] == "sensitive_content_review_required")
+        check("se combinan los hallazgos declarados por la destilacion y los de la red mecanica", len(result10["sensitive_content_findings"]) >= 2)
+
+        # --- store de capturas: ubicacion real y control de acceso (docs/adr/0018) ---
+        try:
+            ingestion.resolve_capture_store_dir(repo_root, knowledge_dir)
+            check("resolve_capture_store_dir falla si .contextbase/config.yaml no tiene capture_store_dir", False)
+        except ingestion.IngestionError as exc:
+            check("resolve_capture_store_dir falla si .contextbase/config.yaml no tiene capture_store_dir", "capture_store_dir" in str(exc))
+
+        config_path = repo_root / ".contextbase" / "config.yaml"
+        config_path.write_text(f"ingestion:\n  capture_store_dir: '{knowledge_dir}'\n", encoding="utf-8")
+        try:
+            ingestion.resolve_capture_store_dir(repo_root, knowledge_dir)
+            check("resolve_capture_store_dir rechaza un capture_store_dir adentro del repo Context Base", False)
+        except ingestion.IngestionError as exc:
+            check("resolve_capture_store_dir rechaza un capture_store_dir adentro del repo Context Base", "principio 4" in str(exc))
+
+        real_store_dir = tmp_dir / "captures-produccion"
+        config_path.write_text(f"ingestion:\n  capture_store_dir: '{real_store_dir}'\n", encoding="utf-8")
+        resolved_store_dir = ingestion.resolve_capture_store_dir(repo_root, knowledge_dir)
+        check("resolve_capture_store_dir acepta un path fuera del repo y lo crea", resolved_store_dir == real_store_dir.resolve() and resolved_store_dir.is_dir())
+        check("el directorio del store queda con permisos restringidos (0700)", (resolved_store_dir.stat().st_mode & 0o777) == 0o700)
+        saved_real = ingestion.save_capture(resolved_store_dir, sensitive_capture)
+        check("save_capture deja el archivo guardado con permisos restringidos (0600)", (saved_real.stat().st_mode & 0o777) == 0o600)
+        config_path.unlink()
+
         # --- contradiccion (Fase 4, docs/adr/0009): contradicts_id que resuelve a una
         # entrada confirmed real marca esa entrada disputed, citando la evidencia nueva ---
         repo_root_b = tmp_dir / "cliente-descartable-contradiccion"

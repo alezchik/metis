@@ -103,6 +103,12 @@ project:
 ingestion:
   sources: []                # ej: [meetings] -- vacio hasta Fase 3
   confidence_threshold: 0.6     # umbral de confianza/relevancia para proponer (seccion 6)
+  capture_store_dir: ""         # OBLIGATORIO antes de ingesta real -- path ABSOLUTO fuera
+                                 # de este repo para el store de capturas crudas (docs/adr/0018).
+                                 # Ej: /var/contextbase/captures/<cliente> en un deployment de
+                                 # servidor, o ~/.local/share/contextbase/captures/<proyecto> en
+                                 # uso local. lib/ingestion.py::resolve_capture_store_dir frena
+                                 # explicito si esto falta o si apunta adentro de este repo.
 YAMLEOF
 
 cat > "$TARGET/.gitignore" <<'GITEOF'

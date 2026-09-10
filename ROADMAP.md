@@ -93,21 +93,29 @@
   `docs/adr/0012`, no algo que un conector de ingesta pueda resolver por su
   cuenta. Resolverlo de verdad implica autorizacion por usuario en el MCP/API
   server, todavia sin diseñar.
-- **La destilacion de reuniones no tiene ningun filtro de contenido
-  sensible/PII, y el "propio control de acceso" prometido para el store de
-  capturas crudas (seccion 14 de la especificacion) no esta implementado.**
-  Identificado en un analisis de seguridad cross-repo (Metis/Dedalo/Talos,
-  2026-09-09). No es una fuga activa -- la ingesta nunca corrio en
-  produccion todavia -- pero `docs/adr/0014` bloquea correr esto contra una
-  transcripcion real de un proyecto real hasta resolver ambos puntos.
+## Resuelto: filtro de contenido sensible/PII + store de capturas real (`docs/adr/0018`)
+
+`docs/adr/0014` habia identificado que la destilacion de reuniones no tenia
+filtro de contenido sensible/PII, y que el store de capturas crudas no tenia
+una ruta de produccion real ni control de acceso implementado. `docs/adr/0018`
+resuelve ambos: nuevo mecanismo `sensitive_content_findings`/
+`sensitive_content_review_required` (espejo de `security_findings`, seccion 7)
+en `skills/metis-ingest-meeting/SKILL.md` + `lib/ingestion.py`, y
+`ingestion.capture_store_dir` (obligatorio, fuera del repo, permisos POSIX
+restringidos) resuelto por `lib/ingestion.py::resolve_capture_store_dir` y
+wireado de punta a punta por `scripts/ingest-capture.sh` +
+`scripts/run-ingestion-pipeline.sh` -- antes no existia ningun script que
+corriera esto en produccion. Ya no bloquea correr el conector de reuniones
+contra una transcripcion real.
 
 ## Proximo hito: un piloto real
 
 Todo lo de arriba se valido contra `fixtures/` -- un Context Base de mentira, una
 transcripcion de mentira. El proximo paso real es levantar un Context Base contra
 un proyecto real: un repo Git real del cliente, una API key real emitida para ese
-proyecto, y correr el pipeline de ingesta contra una reunion real. Nada de este
-repo bloquea que eso arranque.
+proyecto, un `ingestion.capture_store_dir` configurado para ese deployment, y
+correr el pipeline de ingesta contra una reunion real. Nada de este repo bloquea
+que eso arranque.
 
 Un segundo hito, independiente y sin fecha, es la integracion de punta a punta con
 Dedalo/Talos -- el contrato ya esta documentado (`docs/design/frontera-ecosistema-talos.md`,

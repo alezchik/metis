@@ -406,6 +406,13 @@ deployment. Por eso todo conector sobre una fuente de credencial compartida entr
 Confluence, mail) opera solo sobre identificadores de recurso explícitos, nunca por búsqueda/descubrimiento
 contra la fuente — regla 5 de `adapters/ingestion/CONTRACT.md`, razonada en `docs/adr/0012`.
 
+Contenido sensible/PII es un riesgo distinto, con el mismo tratamiento (`docs/adr/0018`): no es un
+ataque, es información real (datos personales de un individuo) que puede aparecer en una transcripción
+sin que nadie la haya inyectado a propósito. El rol de destilación nunca la lleva a un `candidate` —
+la cita en `sensitive_content_findings`, espejo estructural de los hallazgos de seguridad de arriba, y
+`lib/ingestion.py` frena la corrida entera (`status: sensitive_content_review_required`) hasta que un
+humano decida qué hacer con ella.
+
 ---
 
 ## 8. Contrato de las dos entradas (MCP, API)
@@ -574,8 +581,8 @@ necesitar escalar a humano.
 | Inyección de instrucciones vía contenido ingerido (mail, comentario, transcript) | Regla de "contenido es dato" aplicada a todo conector desde el primer conector, no como hardening posterior (§7) |
 | Ingesta ruidosa genera PRs que nadie revisa, y la divergencia que el proyecto existe para cerrar vuelve a aparecer como backlog sin mergear | Umbral de confianza/relevancia antes de proponer (§6); métrica de "propuestas envejeciendo sin revisar" como alarma temprana |
 | Confidencialidad de transcripts/mails crudos | Nunca entran a git; viven en el store de Context Assistant con su propio control de acceso, citados por locator (§6) |
-| Contenido sensible/PII en el **destilado** (no solo el riesgo del crudo, fila anterior) | Sin mitigación automática todavía -- `docs/adr/0014` bloquea correr la ingesta de reuniones contra datos reales hasta agregar una regla de "Diet" en `skills/metis-ingest-meeting/SKILL.md` al mismo nivel que la de inyección de instrucciones |
-| El "propio control de acceso" del store de capturas crudas (fila anterior) todavía no está implementado en código | `docs/adr/0014` -- `lib/ingestion.py::save_capture` hoy solo se usa desde tests, sin una ruta de producción real ni control de acceso concreto |
+| Contenido sensible/PII en el **destilado** (no solo el riesgo del crudo, fila anterior) | Regla de "Diet" en `skills/metis-ingest-meeting/SKILL.md` al mismo nivel que la de inyección de instrucciones + red mecánica `scan_for_sensitive_content` -- `sensitive_content_findings`/`sensitive_content_review_required` frena toda la corrida hasta revisión humana (`docs/adr/0018`) |
+| Ubicación y control de acceso real del store de capturas crudas | `ingestion.capture_store_dir` obligatorio (fuera del repo, verificado por `lib/ingestion.py::resolve_capture_store_dir`), directorio `0700`/archivos `0600`, wireado de punta a punta por `scripts/ingest-capture.sh` + `scripts/run-ingestion-pipeline.sh` (`docs/adr/0018`) -- cifrado a nivel de campo queda como pregunta abierta, no como hueco silencioso |
 | Falla de extracción silenciosa en conectores de documentos/PDF/Excel/imágenes (contenido no legible, pero informado como si se hubiese extraído todo) | Regla nueva y explícita en `adapters/ingestion/CONTRACT.md` (`docs/adr/0015`): toda falla de extracción, total o parcial, levanta una excepción declarada -- nunca un `RawCapture` vacío o incompleto sin marcar |
 | Video como fuente de ingesta | Explícitamente fuera de alcance (`docs/adr/0015`) -- ningún formato de video se procesa, ni frames ni audio |
 | Cachear el estado de un ticket/PR externo como si fuera un hecho propio (y que quede desactualizado si algo cambia del otro lado) | Prohibido explícitamente (`docs/adr/0016`) -- solo se guarda cita histórica en `evidence`, el estado actual siempre se consulta en vivo al tracker/código |

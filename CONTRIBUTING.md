@@ -56,6 +56,11 @@ Si toca alguna de estas cosas, agregar uno bajo `docs/adr/` (ver
   distinta de `adapters/ingestion/CONTRACT.md`, ver `docs/adr/0016` y
   `docs/design/plan-auditoria-implementacion.md`. La regla que nunca se afloja: ese
   estado no se cachea como hecho propio en Context Base.
+- agregar o cambiar un mecanismo de bloqueo por revision humana (el patron
+  `*_findings`/`*_review_required` de la seccion 7 -- `security_findings`,
+  `sensitive_content_findings`), o decidir donde vive de verdad y con que control
+  de acceso un store propio de Context Assistant (nunca en git) -- ver
+  `docs/adr/0014`/`docs/adr/0018` como ejemplo.
 
 Un bug fix, un conector de ingesta nuevo que sigue el patron ya existente
 (`adapters/ingestion/CONTRACT.md`), o una aclaracion de documentacion no necesitan

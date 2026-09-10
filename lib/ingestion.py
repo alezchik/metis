@@ -83,6 +83,21 @@ _INSTRUCTION_PATTERNS = [
     re.compile(r"nueva\s+instrucci[oó]n\s+para\s+el\s+asistente", re.IGNORECASE),
 ]
 
+# Deteccion mecanica de datos personales/sensibles (docs/adr/0018) -- hermana de
+# _INSTRUCTION_PATTERNS/scan_for_embedded_instructions (seccion 7), pero para el
+# riesgo de PII/contenido sensible que identifico ADR-0014, no para instrucciones
+# incrustadas. Son senales estructurales de bajo falso-positivo (forma de email,
+# tarjeta, IBAN) -- una red de contencion adicional, nunca un reemplazo del juicio de
+# la destilacion sobre categorias sin forma reconocible por regex (salud, situacion
+# laboral personal, orientacion, afiliacion, etc. -- ver Diet en
+# skills/metis-ingest-meeting/SKILL.md).
+_SENSITIVE_DATA_PATTERNS = [
+    (re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"), "identidad"),
+    (re.compile(r"\b(?:\+?\d{1,3}[\s.-])?\(?\d{2,4}\)?[\s.-]\d{3,4}[\s.-]\d{3,4}\b"), "identidad"),
+    (re.compile(r"\b\d{4}[\s-]\d{4}[\s-]\d{4}[\s-]\d{2,4}\b"), "financiero"),
+    (re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b"), "financiero"),
+]
+
 
 class IngestionError(ValueError):
     """Una captura o un candidato malformado -- se levanta antes de proponer nada,
@@ -109,6 +124,10 @@ def save_capture(store_dir: str | Path, capture: dict[str, Any]) -> Path:
         raise IngestionError("la captura no trae 'capture_id'")
     path = store_dir / f"{capture_id}.json"
     path.write_text(json.dumps(capture, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass  # sistemas de archivos que no soportan permisos POSIX (docs/adr/0018)
     return path
 
 
@@ -133,6 +152,27 @@ def scan_for_embedded_instructions(raw_text: str) -> list[dict[str, str]]:
                     "quote": raw_text[start:end].strip(),
                     "pattern": pattern.pattern,
                     "note": "contenido con forma de instruccion dirigida al sistema -- se cita, nunca se obedece (seccion 7)",
+                }
+            )
+    return findings
+
+
+def scan_for_sensitive_content(raw_text: str) -> list[dict[str, str]]:
+    """Red de seguridad mecanica para datos personales/sensibles (docs/adr/0018) --
+    misma logica que scan_for_embedded_instructions pero para el riesgo de PII de
+    ADR-0014. Detecta patrones de FORMA (parece un email, una tarjeta, un IBAN);
+    nunca juzga si el contenido "amerita" estar en Context Base -- esa decision
+    queda para un humano (ver Diet en skills/metis-ingest-meeting/SKILL.md)."""
+    findings = []
+    for pattern, category in _SENSITIVE_DATA_PATTERNS:
+        for match in pattern.finditer(raw_text or ""):
+            start = max(0, match.start() - 40)
+            end = min(len(raw_text), match.end() + 40)
+            findings.append(
+                {
+                    "quote": raw_text[start:end].strip(),
+                    "category": category,
+                    "note": "dato personal/sensible detectado por forma estructural (regex), no por interpretacion del contenido -- revision humana requerida (docs/adr/0018)",
                 }
             )
     return findings
@@ -290,6 +330,52 @@ def _load_noise_threshold(knowledge_dir: Path) -> float:
     return float((config.get("ingestion") or {}).get("confidence_threshold", DEFAULT_NOISE_THRESHOLD))
 
 
+def resolve_capture_store_dir(repo_root: str | Path, knowledge_dir: str | Path) -> Path:
+    """Resuelve el store de capturas crudas real de este deployment (docs/adr/0018),
+    leyendo ingestion.capture_store_dir de .contextbase/config.yaml. A diferencia de
+    _load_noise_threshold, esto NUNCA tiene un default silencioso: si no esta
+    configurado, o si apunta adentro del propio repo Context Base, falla explicito
+    (principios 4 y 5) en vez de guardar crudo donde no corresponde o adivinar un
+    path. El control de acceso de este store es, a falta de una capa de
+    autenticacion propia del producto, el filesystem del deployment -- por eso el
+    directorio se crea con permisos restringidos (0700) si no existia."""
+    repo_root = Path(repo_root).resolve()
+    knowledge_dir = Path(knowledge_dir).resolve()
+
+    config_path = _find_config_path(knowledge_dir)
+    if config_path is None:
+        raise IngestionError(
+            "no hay .contextbase/config.yaml -- configura ingestion.capture_store_dir "
+            "antes de ingestar una captura real (docs/adr/0018)"
+        )
+    try:
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise IngestionError(f"config.yaml invalido: {exc}") from exc
+
+    raw_value = (config.get("ingestion") or {}).get("capture_store_dir")
+    if not raw_value:
+        raise IngestionError(
+            "ingestion.capture_store_dir no esta configurado en .contextbase/config.yaml -- "
+            "es obligatorio antes de ingestar una captura real (docs/adr/0018); no hay un "
+            "default silencioso para donde vive el crudo"
+        )
+
+    store_dir = Path(raw_value).expanduser().resolve()
+    if store_dir == repo_root or repo_root in store_dir.parents:
+        raise IngestionError(
+            f"ingestion.capture_store_dir ({store_dir}) no puede estar dentro del repo "
+            f"Context Base ({repo_root}) -- el crudo nunca vive en git (principio 4)"
+        )
+
+    store_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        store_dir.chmod(0o700)
+    except OSError:
+        pass  # sistemas de archivos que no soportan permisos POSIX (docs/adr/0018)
+    return store_dir
+
+
 def run_pipeline(
     repo_root: str | Path,
     knowledge_dir: str | Path,
@@ -304,13 +390,22 @@ def run_pipeline(
     'capture': RawCapture (adapters/ingestion/CONTRACT.md).
     'destilled_output': salida ya estructurada del rol de destilacion
     (skills/metis-ingest-meeting/SKILL.md):
-      {"candidates": [...], "open_questions": [...], "security_findings": [...]}
+      {"candidates": [...], "open_questions": [...], "security_findings": [...],
+       "sensitive_content_findings": [...]}
 
     Seguridad primero (principio 6): si la red de seguridad mecanica o la propia
     destilacion encontraron algo con forma de instruccion incrustada, esta corrida
     NO propone nada -- devuelve status=security_review_required con los hallazgos
     citados, para que un humano decida antes de que cualquier candidato de esta
     captura se convierta en PR.
+
+    Contenido sensible despues (docs/adr/0018): si, ya descartado un ataque, la red
+    mecanica o la propia destilacion marcaron datos personales/sensibles de un
+    individuo, la corrida tampoco propone nada -- devuelve
+    status=sensitive_content_review_required. Es un motivo distinto al de seguridad
+    (aca no hay instruccion incrustada, hay informacion real que un humano tiene que
+    decidir como tratar), pero el mismo nivel de bloqueo: nada se propone sin
+    revision.
     """
     repo_root = Path(repo_root).resolve()
     knowledge_dir = Path(knowledge_dir).resolve()
@@ -319,10 +414,17 @@ def run_pipeline(
     declared_findings = destilled_output.get("security_findings") or []
     security_findings = list(declared_findings) + [f for f in mechanical_findings if f not in declared_findings]
 
+    mechanical_sensitive = scan_for_sensitive_content(capture.get("raw_text", ""))
+    declared_sensitive = destilled_output.get("sensitive_content_findings") or []
+    sensitive_content_findings = list(declared_sensitive) + [
+        f for f in mechanical_sensitive if f not in declared_sensitive
+    ]
+
     result: dict[str, Any] = {
         "capture_id": capture.get("capture_id"),
         "locator": capture.get("locator"),
         "security_findings": security_findings,
+        "sensitive_content_findings": sensitive_content_findings,
         "open_questions": destilled_output.get("open_questions") or [],
         "proposed": [],
         "skipped_low_confidence": [],
@@ -333,6 +435,10 @@ def run_pipeline(
 
     if security_findings:
         result["status"] = "security_review_required"
+        return result
+
+    if sensitive_content_findings:
+        result["status"] = "sensitive_content_review_required"
         return result
 
     threshold = noise_threshold if noise_threshold is not None else _load_noise_threshold(knowledge_dir)
