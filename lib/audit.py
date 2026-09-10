@@ -46,7 +46,7 @@ if str(_REPO_ROOT) not in sys.path:
 import yaml  # noqa: E402
 
 from adapters.code import git_log  # noqa: E402
-from adapters.tracker import file_tracker, github_issues  # noqa: E402
+from adapters.tracker import file_tracker, github_issues, linear_issues  # noqa: E402
 from lib.config import find_config_path  # noqa: E402
 from lib.index import build_index  # noqa: E402
 
@@ -87,8 +87,12 @@ def _load_audit_config(knowledge_dir: Path) -> tuple[dict[str, Any] | None, dict
         if not tracker_raw.get("repo"):
             raise AuditError("tracker.provider es 'github' pero falta tracker.repo (formato 'owner/repo')")
         tracker_cfg = {"provider": "github", "repo": tracker_raw["repo"]}
+    elif provider == "linear":
+        if not tracker_raw.get("team_key"):
+            raise AuditError("tracker.provider es 'linear' pero falta tracker.team_key (ej. 'ENG')")
+        tracker_cfg = {"provider": "linear", "team_key": tracker_raw["team_key"]}
     elif provider not in (None, "", "none"):
-        raise AuditError(f"tracker.provider desconocido: {provider!r} (soportados: file, github)")
+        raise AuditError(f"tracker.provider desconocido: {provider!r} (soportados: file, github, linear)")
 
     code_raw = config.get("code") or {}
     code_cfg: dict[str, Any] | None = None
@@ -101,12 +105,16 @@ def _load_audit_config(knowledge_dir: Path) -> tuple[dict[str, Any] | None, dict
 def _tracker_find_related(tracker_cfg: dict[str, Any], query_hint: str, min_similarity: float) -> list[dict]:
     if tracker_cfg["provider"] == "file":
         return file_tracker.find_related(tracker_cfg["tickets_file"], query_hint, min_similarity=min_similarity)
+    if tracker_cfg["provider"] == "linear":
+        return linear_issues.find_related(tracker_cfg["team_key"], query_hint, min_similarity=min_similarity)
     return github_issues.find_related(tracker_cfg["repo"], query_hint, min_similarity=min_similarity)
 
 
 def _tracker_get_status(tracker_cfg: dict[str, Any], ref: str) -> dict:
     if tracker_cfg["provider"] == "file":
         return file_tracker.get_status(tracker_cfg["tickets_file"], ref)
+    if tracker_cfg["provider"] == "linear":
+        return linear_issues.get_status(tracker_cfg["team_key"], ref)
     return github_issues.get_status(tracker_cfg["repo"], ref)
 
 

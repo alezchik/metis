@@ -77,6 +77,23 @@ excepcion que un llamador pueda confundir con "el tracker no esta disponible".
   este repo (serian no-herméticos: pegarian contra GitHub de verdad o dependerian de
   que `gh` este instalado y autenticado en el entorno que corre los tests, ver
   `CLAUDE.md`), pero implementa exactamente el mismo contrato que `file_tracker.py`.
+- **`linear_issues.py`** -- lee issues de un team de Linear real via su API GraphQL
+  (`https://api.linear.app/graphql`), autenticado con una API key leida de la
+  variable de entorno `LINEAR_API_KEY` (nunca guardada en `config.yaml`). Toda
+  consulta recibe un `team_key` explicito (regla 3) y el conector nunca
+  busca/enumera fuera de ese team. **Nota sobre alcance de la credencial**: a
+  diferencia de un token de `gh` (acotable por repo), una API key personal de
+  Linear es tipicamente de alcance workspace completo del lado de la credencial en
+  si -- mismo tipo de riesgo que ya se evaluo para Notion (`docs/adr/0012`/`0013`).
+  La mitigacion es identica a la de `github_issues.py`: el CODIGO nunca hace
+  busqueda/descubrimiento fuera del `team_key` dado; el alcance real de la
+  credencial en si sigue siendo responsabilidad de quien la emite. A diferencia de
+  `file_tracker.py`/`github_issues.py`, implementa el esquema GraphQL PUBLICO
+  documentado de Linear pero no fue ejercitado contra un workspace real (sin API key
+  disponible en el entorno donde se escribio) -- `tests/test-linear-tracker.py`
+  cubre la logica pura con un transporte HTTP simulado, lo que NO reemplaza validar
+  contra un workspace real antes de un deployment real.
 
 Configuracion (`.contextbase/config.yaml`, seccion `tracker:`) en
+`scripts/contextbase-install.sh` (`config.yaml.example`) y
 `docs/design/plan-auditoria-implementacion.md`.

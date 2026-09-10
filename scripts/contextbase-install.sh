@@ -113,9 +113,11 @@ ingestion:
 tracker:                       # OPCIONAL -- sin esto, audit_gaps() degrada explicito con
                                 # {"error": "tracker_not_configured"} (docs/adr/0016), el
                                 # resto de Metis sigue andando igual.
-  provider: ""                  # file | github
+  provider: ""                  # file | github | linear
   tickets_file: ""               # path a un JSON [{ref,title,state,url}, ...] -- si provider=file
   repo: ""                       # "owner/repo" -- si provider=github (usa gh, sin comillas, ya autenticado)
+  team_key: ""                   # ej. "ENG" -- si provider=linear (usa la variable de entorno
+                                 # LINEAR_API_KEY, nunca guardada aca -- docs/adr/0012)
 code:                          # OPCIONAL -- sin esto, audit_gaps() igual corre, pero cada
                                 # resultado queda marcado approximation=true (ticket cerrado
                                 # sin verificar contra un commit mergeado, ver

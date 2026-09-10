@@ -168,6 +168,10 @@ detalle y el porqué de cada una:
 - **Qué tracker primero.** Los dos: `adapters/tracker/file_tracker.py` (conector de
   referencia, probado de punta a punta) y `adapters/tracker/github_issues.py`
   (conector real via `gh`, no ejercitado por los tests hermeticos de este repo).
+  Un tercero se sumó después: `adapters/tracker/linear_issues.py` (API GraphQL de
+  Linear, autenticación via `LINEAR_API_KEY`) — misma lógica que `github_issues.py`
+  (nunca ejercitado contra un workspace real, pero con cobertura hermética de su
+  lógica pura vía un transporte HTTP simulado, `tests/test-linear-tracker.py`).
 - **Enum `source` nuevo (`tracker`).** Agregado a los seis `schemas/*.schema.json`
   (y su copia instalada en `fixtures/contextbase/.contextbase/schema/`) y a
   `schemas/ingestion-candidate.schema.json`.

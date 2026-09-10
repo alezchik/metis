@@ -66,6 +66,14 @@
   (que tracker primero, el enum `source` nuevo, como leer codigo) en
   `docs/adr/0019`. Probado (`tests/test-audit.sh`, ampliacion de
   `tests/test-mcp-protocol.sh` y `tests/test-api-server.sh`).
+- **Conector de tracker Linear.** `adapters/tracker/linear_issues.py` -- tercer
+  provider de tracker para `audit_gaps` (junto a `file`/`github`), via la API
+  GraphQL de Linear (`LINEAR_API_KEY`, nunca guardada en `config.yaml`). Mismo
+  contrato que los otros dos (`adapters/tracker/CONTRACT.md`): alcance explicito
+  por `team_key`, nunca busqueda/descubrimiento fuera de ese team. No ejercitado
+  contra un workspace real (sin credenciales en este entorno), pero con cobertura
+  hermetica de su logica pura via un transporte HTTP simulado
+  (`tests/test-linear-tracker.sh`).
 - **Ingesta de documentos (docs/PDF/Excel/imagenes).** Cuatro conectores nuevos bajo
   `adapters/ingestion/` -- `document_file.py` (`.docx`/`.txt`/`.md`), `pdf_file.py`
   (texto por pagina via `pypdf`), `spreadsheet_file.py` (`.xlsx`/`.csv`, serializado

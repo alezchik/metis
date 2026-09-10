@@ -106,6 +106,7 @@ adapters/
     CONTRACT.md            contrato de conectores de tracker (find_related/get_status)
     file_tracker.py         conector de referencia: tickets en un JSON local (Fase 6)
     github_issues.py        conector real via `gh issue` (no ejercitado por los tests)
+    linear_issues.py         conector real via API GraphQL de Linear (LINEAR_API_KEY)
   code/
     CONTRACT.md            contrato de conectores de codigo (find_related/get_status)
     git_log.py               `git log --grep` sobre un checkout local (Fase 6)
@@ -130,6 +131,7 @@ tests/
   test-api-server.sh            Fase 4+6: las 7 operaciones via HTTP real + auth por API key
   test-audit.sh                 Fase 6: conectores tracker/codigo + audit_gaps de punta a punta
   test-document-ingestion.sh    Ingesta de documentos: document_file/pdf_file/spreadsheet_file/image_file
+  test-linear-tracker.sh        Conector de tracker Linear: logica + wiring en lib/audit.py (transporte simulado)
 docs/
   design/            los tres documentos de diseno (fuente de verdad)
   adr/               decisiones de arquitectura tomadas durante la construccion
@@ -346,8 +348,9 @@ ticket -- priorizado". Lee un tracker (`adapters/tracker/`) y el codigo del clie
 hecho propio en Context Base (la unica escritura permitida relacionada con esto es
 una cita historica de tracker via `evidence`, agregada conversacionalmente con
 `propose_update`, nunca automatica). Requiere `tracker:` en
-`.contextbase/config.yaml` (`provider: file` con `tickets_file`, o `provider: github`
-con `repo`, usando `gh` ya autenticado) -- sin eso, `audit_gaps()` devuelve
+`.contextbase/config.yaml` (`provider: file` con `tickets_file`, `provider: github`
+con `repo` usando `gh` ya autenticado, o `provider: linear` con `team_key` usando la
+variable de entorno `LINEAR_API_KEY`) -- sin eso, `audit_gaps()` devuelve
 `{"error": "tracker_not_configured"}` explicito, sin afectar el resto de Metis. Sin
 `code: {repo_path}` configurado, igual corre, pero cada resultado queda marcado
 `approximation: true` ("ticket cerrado" solo no alcanza como "implementado" sin
@@ -371,6 +374,7 @@ tests/test-ingestion.sh              # Fase 3+4 -- pipeline completo, dedup, umb
 tests/test-api-server.sh             # Fase 4+6 -- las 7 operaciones via HTTP real + auth por API key
 tests/test-audit.sh                  # Fase 6 -- conectores tracker/codigo + audit_gaps de punta a punta
 tests/test-document-ingestion.sh     # Ingesta de documentos -- document_file/pdf_file/spreadsheet_file/image_file
+tests/test-linear-tracker.sh         # Conector de tracker Linear -- logica + wiring en lib/audit.py
 ```
 
 ## Principios (resumen; el detalle completo esta en la especificacion)

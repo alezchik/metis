@@ -100,6 +100,16 @@ construccion de Fase 0-5.
   ya usa `tests/test-audit.py` con un repo de codigo descartable: mas simple y mas
   explicito que revisar un binario en un diff de PR.
 
+- **`linear_issues.py` lee la API key de la variable de entorno `LINEAR_API_KEY`,
+  nunca de `.contextbase/config.yaml`** (mismo criterio que `gh` ya autenticado
+  para `github_issues.py`/`git_provider.py`). Y a diferencia de un token de `gh`
+  (acotable por repo), una API key personal de Linear suele ser de alcance
+  workspace completo del lado de la credencial -- el conector mitiga con alcance
+  explicito por `team_key` en el CODIGO (nunca busca fuera de ese team), pero eso
+  no acota la credencial en si. Ver `adapters/tracker/CONTRACT.md` para el detalle
+  completo, mismo tipo de riesgo que ya se evaluo para Notion (`docs/adr/0012`/
+  `0013`).
+
 ## Correr los tests
 
 ```bash
