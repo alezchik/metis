@@ -11,6 +11,10 @@ Expone las siete operaciones del contrato MCP:
                                      implementado / tiene ticket sin implementar /
                                      no tiene ticket, leyendo tracker+codigo en vivo
                                      (docs/adr/0016). Solo lectura.
+  evaluate_implementation(requirement_id) -- Fase 8: evaluacion de codigo via LLM
+                                     bajo demanda para el caso sin ticket
+                                     (docs/adr/0022), siempre con evidencia puntual
+                                     citada. Solo lectura, no deterministico.
   propose_decision(payload)       -- Write Agent: abre una propuesta (PR o su
                                      degradacion, ver adapters/CONTRACT.md) con una
                                      decision nueva. Nunca mergea.
@@ -58,8 +62,10 @@ mcp = MCPServer(
         "reuniones destiladas y terminos de glosario. Toda respuesta cita archivo + "
         "commit (built_from); si no hay evidencia, la operacion devuelve vacio o "
         "{error: not_found} -- nunca completa con contenido inventado. "
-        "search_knowledge/get_decision/get_requirement/list_open_questions/audit_gaps son "
-        "de solo lectura. propose_decision/propose_update abren una propuesta (PR o su "
+        "search_knowledge/get_decision/get_requirement/list_open_questions/audit_gaps/"
+        "evaluate_implementation son de solo lectura -- evaluate_implementation ademas nunca "
+        "es deterministico, y descarta cualquier veredicto sin evidencia puntual citada. "
+        "propose_decision/propose_update abren una propuesta (PR o su "
         "degradacion) contra Context Base -- nunca mergean, nunca escriben directo a "
         "la rama base; el humano que revisa el PR es quien confirma de verdad."
     ),
@@ -127,6 +133,30 @@ def audit_gaps(requirement_id: str | None = None) -> dict:
     llamada (mismo principio que el indice: derivado, reconstruible).
     """
     return DEPLOYMENT.audit_gaps(requirement_id)
+
+
+@mcp.tool()
+def evaluate_implementation(requirement_id: str) -> dict:
+    """Fase 8 (docs/adr/0022): evaluacion de codigo via LLM bajo demanda -- para el
+    caso en que audit_gaps() no encontro ningun ticket relacionado (ni citado ni por
+    matching). Lee codigo candidato (acotado por palabras clave del requirement,
+    nunca el repo entero) y devuelve un veredicto SIEMPRE con evidencia puntual
+    citada (archivo/linea/commit) -- sin esa evidencia, el veredicto se convierte en
+    "inconclusive" antes de llegar aca (adapters/llm/CONTRACT.md, regla 1).
+    'deterministic' siempre False -- dos corridas pueden diferir, nunca se trata
+    como un hecho equivalente a audit_gaps (grep + estado de tracker,
+    deterministico). Convive con audit_gaps(), no lo reemplaza -- el chequeo barato
+    y deterministico sigue siendo el primer intento.
+
+    Args:
+        requirement_id: id del requirement `confirmed` a evaluar (ej. REQ-0007).
+
+    Sin 'code:' o sin 'llm:' configurado en .contextbase/config.yaml, devuelve un
+    error explicito ({"error": "code_not_configured"} / {"error":
+    "llm_not_configured"}) -- a diferencia de audit_gaps, esta operacion no tiene
+    un modo aproximado sin esos conectores (docs/adr/0024).
+    """
+    return DEPLOYMENT.evaluate_implementation(requirement_id)
 
 
 @mcp.tool()

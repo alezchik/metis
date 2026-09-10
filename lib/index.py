@@ -3,9 +3,13 @@
 Indice semantico de Context Base -- derivado, reconstruible enteramente desde el HEAD
 del repo. Ver docs/design/spec-tecnica-funcional.md secciones 3, 5.2, 8.1.
 
-MVP de Fase 1: indice lexical (TF-IDF liviano sobre titulo+tags+cuerpo), no embeddings.
-Ver docs/adr/0002-indice-lexical-no-embeddings.md para por que, y cuando conviene subir
-a embeddings reales.
+Dos motores de busqueda (search() vs. semantic_search(), docs/adr/0021 -- supersede a
+docs/adr/0002): sin un motor de IA configurado (adapters/llm/CONTRACT.md), search() usa
+un indice lexical (TF-IDF liviano sobre titulo+tags+cuerpo) -- fallback explicito, nunca
+silencioso (docs/adr/0024). Con 'llm:' configurado, context_assistant/core.py llama en su
+lugar a semantic_search(), que compara embeddings en vez de tokens -- resuelve el caso que
+TF-IDF nunca pudo resolver: un pedido en un idioma distinto al del contenido, o parafraseado
+distinto (docs/adr/0021, contexto).
 
 No es fuente de verdad: se puede borrar y reconstruir en cualquier momento desde
 Context Base sin perdida de informacion. Cada indice declara built_from: <commit sha>
@@ -32,42 +36,8 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from lib.validate_frontmatter import ENTRY_SUBDIRS, extract_frontmatter  # noqa: E402
-
-import re
-
-TOKEN_RE = re.compile(r"[a-z0-9áéíóúñü]+", re.IGNORECASE)
-
-# Stopwords minimas (es/en) para que el indice lexical no "matchee" cualquier cosa por
-# palabras funcionales -- sin esto, una busqueda sin relacion real con el contenido
-# igual devolveria resultados solo porque comparte "que"/"en"/"the", lo cual violaria
-# en la practica el principio de "evidencia o silencio" (seccion 1, principio 3).
-STOPWORDS = frozenset(
-    """
-    a al algo algunas algunos ante antes como con contra cual cuando de del desde donde
-    durante e el ella ellas ellos en entre era erais eramos eran eras eres es esa esas
-    ese esos esta estaba estabais estabamos estaban estabas estad estada estadas estado
-    estados estamos estan estando estar estara estaran estaras estare estareis estaremos
-    estaria estariais estariamos estarian estarias este esto estos estoy fue fuera
-    fuerais fueramos fueran fueras fueron fuese fueseis fuesemos fuesen fueses fui fuimos
-    ha habia habiais habiamos habian habias habida habidas habido habidos habiendo
-    habla habla hasta hay la las le les lo los mas me mi mia mias mientras mio mios mis
-    misma mismas mismo mismos mucho muchos muy nada ni no nos nosotras nosotros nuestra
-    nuestras nuestro nuestros o os otra otras otro otros para pero poco por porque que
-    quien quienes se sea seamos sean seas sentid ser sera seran seras sere sereis
-    seremos seria seriais seriamos serian serias si sido siendo sin sobre sois somos
-    son soy su sus suya suyas suyo suyos tambien tanto te tendra tendran tendras tendre
-    tendreis tendremos tendria tendriais tendriamos tendrian tendrias tened teneis
-    tenemos tener tenga tengamos tengan tengas tengo tenia teniais teniamos tenian
-    tenias ti tiene tienen tienes todo todos tu tus tuya tuyas tuyo tuyos un una uno
-    unos vosotras vosotros vuestra vuestras vuestro vuestros y ya yo
-    the a an is are was were be been being to of in on for with at by from as it its
-    this that these those and or but if then else not no
-    """.split()
-)
-
-
-def _tokenize(text: str) -> list[str]:
-    return [t.lower() for t in TOKEN_RE.findall(text or "") if t.lower() not in STOPWORDS]
+from adapters.llm.similarity import cosine_similarity  # noqa: E402
+from lib.text import tokenize as _tokenize  # noqa: E402
 
 
 def _git_commit_sha(path: Path) -> str:
@@ -192,6 +162,59 @@ def search(index: dict, query: str, entry_type: str | None = None, top_k: int = 
             continue
         score = _tfidf_score(query_tokens, entry, df, n_docs)
         if score > 0:
+            scored.append((score, entry))
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [_citation(entry, index, score) for score, entry in scored[:top_k]]
+
+
+def _entry_haystack(entry: dict[str, Any], knowledge_dir: Path) -> str:
+    """Mismo haystack que build_index() tokeniza (titulo+tags+cuerpo), pero como
+    texto plano en vez de bag-of-words -- necesario para provider.embed() (docs/adr/
+    0021). Se relee el archivo en el momento en vez de guardarlo en el indice, para
+    no duplicar el cuerpo completo de cada entrada dentro de index.json -- mismo
+    motivo que lib/audit.py::_related_risk_severity relee el archivo en vez de
+    guardar el texto crudo en el indice."""
+    fm = entry.get("frontmatter", {})
+    try:
+        raw_text = (knowledge_dir / entry["file"]).read_text(encoding="utf-8")
+        body = _body_text(raw_text)
+    except OSError:
+        body = ""
+    return " ".join([entry.get("title") or "", " ".join(fm.get("tags") or []), body])
+
+
+def semantic_search(
+    index: dict,
+    query: str,
+    provider: Any,
+    entry_type: str | None = None,
+    top_k: int = 5,
+    min_similarity: float = 0.55,
+) -> list[dict]:
+    """Mismo contrato que search() -- docs/adr/0021: "el contrato de ambas
+    operaciones no cambia". Devuelve [] si nada supera min_similarity, nunca
+    inventa (principio 3). Motor: similitud de coseno entre el embedding de 'query'
+    y el de cada entrada (provider, adapters/llm/CONTRACT.md::embed), en vez de
+    TF-IDF -- resuelve cruce de idioma y parafraseo, que TF-IDF nunca pudo resolver
+    por diseño (docs/adr/0021).
+
+    Sin cache de embeddings, a proposito, por ahora: mismo principio que el resto
+    del indice ("derivado, reconstruible", ver CLAUDE.md) -- pero el costo/latencia
+    real de re-embeber todo el contenido indexado en cada llamada no se midio
+    contra un volumen real. Ver ROADMAP.md, "Huecos conocidos", si esto se vuelve un
+    problema en un deployment real."""
+    query_vec = provider.embed(query)
+    knowledge_dir = Path(index["knowledge_dir"])
+    scored = []
+    for entry in index["entries"]:
+        if entry_type and entry["type"] != entry_type:
+            continue
+        haystack = _entry_haystack(entry, knowledge_dir)
+        if not haystack.strip():
+            continue
+        entry_vec = provider.embed(haystack)
+        score = cosine_similarity(query_vec, entry_vec)
+        if score >= min_similarity:
             scored.append((score, entry))
     scored.sort(key=lambda pair: pair[0], reverse=True)
     return [_citation(entry, index, score) for score, entry in scored[:top_k]]

@@ -26,6 +26,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from adapters.llm.similarity import cosine_similarity
+
 
 class TrackerProviderError(RuntimeError):
     """El tracker no se pudo consultar de una forma que no es 'el ticket no existe'
@@ -47,17 +49,27 @@ def _load_tickets(tickets_file: str | Path) -> list[dict[str, Any]]:
     return data
 
 
-def find_related(tickets_file: str | Path, query_hint: str, min_similarity: float = 0.5) -> list[dict[str, Any]]:
-    """Similitud lexical de titulo (mismo mecanismo que
-    lib/ingestion.py::classify_candidate usa para dedup/match, docs/adr/0008) --
-    ninguna API de tracker real ofrece busqueda semantica gratis, y esto funciona
-    igual sin tener que citar el ticket de antemano."""
+def find_related(
+    tickets_file: str | Path, query_hint: str, min_similarity: float = 0.5, provider: Any | None = None
+) -> list[dict[str, Any]]:
+    """Similitud de titulo -- lexical por default (mismo mecanismo que
+    lib/ingestion.py::classify_candidate usa para dedup/match, docs/adr/0008), o
+    semantica si se pasa un 'provider' de motor de IA (adapters/llm/CONTRACT.md,
+    docs/adr/0021) -- resuelve el caso que difflib nunca pudo: un pedido en un
+    idioma distinto al del ticket, o parafraseado distinto. El contrato no cambia
+    (docs/adr/0021): misma firma de retorno, 'provider' es un parametro opcional
+    nuevo, quien no lo pasa sigue viendo exactamente el mismo comportamiento de
+    antes."""
     tickets = _load_tickets(tickets_file)
     hits = []
     needle = (query_hint or "").lower().strip()
+    query_vec = provider.embed(needle) if provider is not None else None
     for ticket in tickets:
         title = (ticket.get("title") or "").lower().strip()
-        ratio = difflib.SequenceMatcher(None, needle, title).ratio()
+        if provider is not None:
+            ratio = cosine_similarity(query_vec, provider.embed(title))
+        else:
+            ratio = difflib.SequenceMatcher(None, needle, title).ratio()
         if ratio >= min_similarity:
             hits.append(
                 {

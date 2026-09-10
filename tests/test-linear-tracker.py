@@ -145,7 +145,7 @@ def main() -> int:
             (contextbase_dir / "config.yaml").write_text(
                 yaml.safe_dump({"tracker": {"provider": "linear", "team_key": "ENG"}}), encoding="utf-8"
             )
-            tracker_cfg, code_cfg = audit._load_audit_config(tmp_dir)
+            tracker_cfg, code_cfg, llm_cfg = audit._load_audit_config(tmp_dir)
             check("_load_audit_config reconoce provider=linear y trae team_key", tracker_cfg == {"provider": "linear", "team_key": "ENG"})
 
             missing_team_key = tmp_dir.parent / "sin-team-key"
@@ -167,7 +167,7 @@ def main() -> int:
             original_get_status = linear_issues.get_status
             calls: list[str] = []
             try:
-                def fake_find_related(team_key, query_hint, min_similarity=0.5):
+                def fake_find_related(team_key, query_hint, min_similarity=0.5, provider=None):
                     calls.append(f"find_related({team_key!r}, {query_hint!r})")
                     return [{"ref": "ENG-1", "title": query_hint, "url": "u", "state": "done", "similarity": 1.0}]
 

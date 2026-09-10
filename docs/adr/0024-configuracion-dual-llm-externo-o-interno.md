@@ -1,7 +1,7 @@
 # ADR 0024 -- Configuracion dual del motor de IA: proveedor externo o modelo servido internamente
 
 Fecha: 2026-09-10
-Estado: propuesta
+Estado: aceptada
 
 ## Contexto
 

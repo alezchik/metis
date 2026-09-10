@@ -1,7 +1,7 @@
 # ADR 0023 -- Metis gana superficie de red saliente hacia un proveedor de IA (o modelo local)
 
 Fecha: 2026-09-10
-Estado: propuesta
+Estado: aceptada
 
 ## Contexto
 

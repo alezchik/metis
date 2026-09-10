@@ -443,9 +443,20 @@ como herramienta — mismo espíritu que `providers/CONTRACT.md` de Talos.
 Siete operaciones, ningún verbo que borre ni que mergee — igual que el contrato de providers de Talos
 (`check, poll, fetch, comment, recheck, label`) se mantiene deliberadamente angosto.
 
+**Nota (`docs/adr/0021`-`0024`, Fase 7 y Fase 8).** `search_knowledge` ganó un motor semántico
+(embeddings) que corre junto al motor léxico original, con degradación explícita a léxico
+(nunca silenciosa, con aviso) si no hay proveedor de LLM configurado o si la llamada al proveedor falla.
+Se sumó además una octava operación, de solo lectura:
+
+| Operación | Qué hace | Escribe |
+|---|---|---|
+| `evaluate_implementation(requirement_id)` | Para un `requirement` confirmed que no tiene ticket en el tracker (ni implementado ni pendiente), le pide a un LLM que evalúe si el código lo implementa — con evidencia citada (archivo + línea) obligatoria; sin evidencia citable, el veredicto es `inconclusive`, nunca una afirmación sin respaldo | No |
+
+Ocho operaciones, ningún verbo que borre ni que mergee — el mismo criterio angosto se sostiene.
+
 ### 8.2 API REST
 
-Espejo delgado de las mismas siete operaciones, para automatizaciones del cliente que no hablan MCP.
+Espejo delgado de las mismas ocho operaciones, para automatizaciones del cliente que no hablan MCP.
 Autenticación por API key emitida por proyecto (nunca compartida entre clientes, consistente con §5.1).
 
 **Nota (`docs/adr/0017`).** El borrador original también nombraba un Slack app y una web app como
@@ -599,6 +610,7 @@ necesitar escalar a humano.
 | Mezcla de contexto entre clientes | Resuelto por construcción: un deployment aislado por proyecto, nunca multi-tenant (§5.1) |
 | El índice semántico se desincroniza del repo y empieza a responder con información vieja | `built_from` por commit sha en cada entrada indexada + reconstrucción completa posible en cualquier momento (§5.2) |
 | Cliente sin GitHub/GitLab hosteado (on-prem, sin API) | El formato markdown es portable incluso sin conector de PR automático — degrada a "generar el diff, un humano lo aplica a mano" en el peor caso, nunca bloquea la existencia de Context Base |
+| Enviar código/contexto a un proveedor de LLM externo (`docs/adr/0024`, modo `external`) puede filtrar datos sensibles o PII fuera del perímetro del cliente | Mitigado parcialmente por el modo `self_hosted` (endpoint propio del cliente, sin salir de su red); un filtro de PII para el modo `external` queda como pregunta abierta, documentada explícitamente en `ROADMAP.md` — nunca un hueco silencioso |
 
 ---
 

@@ -70,11 +70,32 @@ valido, no un error.
 Configuracion (`.contextbase/config.yaml`, seccion `code:`) en
 `docs/design/plan-auditoria-implementacion.md`.
 
-## Nota (2026-09-10, propuesta -- no implementado todavia)
+## Tercera operacion: `search_content` (docs/adr/0022, implementada)
 
-Este contrato (`find_related`/`get_status`) sigue dependiendo de un `ref` (id de ticket) para
-buscar en el historial -- sin ticket previo, no hay nada que grepear. `docs/adr/0022` propone
-`evaluate_implementation(requirement_id)` como complemento para ese caso: un rol agentico que lee
-codigo real (no un grep) y devuelve un veredicto con evidencia obligatoria (`adapters/llm/
-CONTRACT.md`). No reemplaza a este contrato -- el chequeo barato y deterministico de aca sigue
-siendo el primer intento.
+`find_related`/`get_status` de arriba dependen de un `ref` (id de ticket) para buscar en el
+historial -- sin ticket previo, no hay nada que grepear. `evaluate_implementation(requirement_id)`
+(`lib/evaluate.py`, Fase 8) cubre ese caso con una tercera operacion, `search_content`:
+
+```
+search_content(keywords: list[str], branch?) -> list[dict]   # archivos candidatos, con lineas + commit
+```
+
+Retrieval acotado por PALABRAS CLAVE del propio requirement (nunca el `ref` de un ticket, que en
+este caso no existe) -- usa `git grep -n -i -I -e <kw1> -e <kw2> ... <branch>` sobre el ARBOL de
+`branch` (nunca el working tree: de solo lectura, igual que el resto de este contrato). Agrupa
+por archivo, devuelve como maximo `max_files` (default 5) ordenados por cantidad de lineas que
+matchean, cada uno con sus lineas y el commit mas reciente que lo modifico en esa rama -- la
+evidencia citable (`file`+`line`+`commit`) que `adapters/llm/CONTRACT.md` (regla 1) exige antes
+de que un veredicto pueda ser `implemented`/`not_implemented`. `[]` si no hay ninguna keyword o
+ningun archivo matchea -- nunca un archivo inventado, mismo principio que `find_related`.
+
+Implementada en `git_log.py` (el unico conector de esta familia). `lib/evaluate.py` es quien
+arma las `keywords` (del bag-of-words ya tokenizado por `lib/index.py::build_index`, nunca del
+id del requirement en si -- mismo gotcha documentado en `CLAUDE.md` para
+`lib/audit.py::_related_risk_severity`) y quien pasa el resultado como `context["code_chunks"]`
+a `adapters/llm/CONTRACT.md::evaluate()` -- este adapter nunca decide por su cuenta que leer
+(regla 5 de ese contrato).
+
+`evaluate_implementation` convive con `audit_gaps()` (`find_related`/`get_status` de arriba), no
+lo reemplaza: el chequeo barato y deterministico basado en `ref` sigue siendo el primer intento;
+`search_content` + el motor de IA son el fallback caro para cuando no hay ticket.

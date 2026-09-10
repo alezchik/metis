@@ -74,7 +74,32 @@ llm:
 
 ## Conectores implementados
 
-Ninguno todavia -- este contrato es la propuesta (`docs/adr/0021`-`0024`), sin codigo escrito en
-este repo. Cuando se implemente, sigue el mismo patron que el resto de `adapters/`: una clase de
-error propia (`LLMProviderError`, mismo criterio que `TrackerProviderError`/`CodeProviderError`),
-y un modulo por modo (`external.py`, `self_hosted.py`).
+- **`external.py`** (`ExternalProvider`) -- modo `provider: external`. Habla el protocolo
+  compartido de `openai_protocol.py` (formato "estilo OpenAI": `POST /embeddings`,
+  `POST /chat/completions`) contra `https://api.openai.com/v1` por default, o contra
+  `llm.endpoint` si se configura (un gateway/proxy que hable el mismo protocolo). API key via
+  la variable de entorno `METIS_LLM_API_KEY` (regla 3 -- nunca en `config.yaml`).
+- **`self_hosted.py`** (`SelfHostedProvider`) -- modo `provider: self_hosted`. Mismo protocolo
+  compartido, `llm.endpoint` OBLIGATORIO (no hay default razonable), API key opcional (misma
+  variable de entorno, para un gateway interno que igual pida autenticacion).
+- **`openai_protocol.py`** -- wire compartido por los dos modos de arriba (embed/evaluate via
+  HTTP, con `transport` inyectable para tests hermeticos, mismo patron que
+  `adapters/tracker/linear_issues.py`). Aca vive tambien la funcion que hace cumplir la regla 1
+  (`_parse_verdict`): un `verdict` sin evidencia puntual se convierte en `inconclusive` ANTES de
+  salir del adapter.
+- **`similarity.py`** -- `cosine_similarity`, usada por `lib/index.py::semantic_search` y por
+  `find_related()` de cada conector de tracker cuando reciben un `provider` (parametro opcional
+  nuevo, el contrato de `find_related`/`get_status` de `adapters/tracker/CONTRACT.md` no cambia).
+- **`errors.py`** -- `LLMProviderError`/`LLMConfigError`, UNA clase compartida entre los dos
+  modos (a diferencia de `TrackerProviderError`/`CodeProviderError`, que cada conector de tracker
+  duplica por archivo) -- ver el docstring de `errors.py` para el porque de esa diferencia.
+
+Un proveedor externo que NO hable el protocolo "estilo OpenAI" (ej. la Messages API de
+Anthropic, que no ofrece embeddings) necesita su propio modulo nuevo bajo `adapters/llm/`,
+siguiendo el mismo contrato de `embed()`/`evaluate()` -- sin tocar `lib/llm_config.py::build_llm_provider`
+salvo para agregar la rama del nuevo `provider` (docs/adr/0024, "Consecuencia directa").
+
+No hay cache de embeddings todavia (`lib/index.py::semantic_search` reembebe todo el contenido
+indexado en cada llamada, mismo principio de "derivado, reconstruible" que el resto del indice)
+-- ver `ROADMAP.md`, "Huecos conocidos", si el costo/latencia se vuelve un problema en un
+deployment real.

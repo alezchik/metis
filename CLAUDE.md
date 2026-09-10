@@ -103,11 +103,28 @@ construccion de Fase 0-5.
   ya usa `tests/test-audit.py` con un repo de codigo descartable: mas simple y mas
   explicito que revisar un binario en un diff de PR.
 
-- **Toda operacion que use el motor de IA (`docs/adr/0021`/`0022`, propuesta, no implementado
-  todavia) tiene que declarar `deterministic: false` y nunca proponer un resultado sin evidencia
-  puntual (archivo/linea/commit).** Ver `adapters/llm/CONTRACT.md`, reglas 1 y 2 -- esto es MAS
-  estricto que el resto de las reglas de evidencia del proyecto, no menos, porque el riesgo de
-  alucinacion de un LLM leyendo codigo es mayor que el de un grep o un indice lexical.
+- **Toda operacion que use el motor de IA (`docs/adr/0021`/`0022`, implementada) tiene que
+  declarar `deterministic: false` y nunca proponer un resultado sin evidencia puntual
+  (archivo/linea/commit).** Ver `adapters/llm/CONTRACT.md`, reglas 1 y 2 -- esto es MAS estricto
+  que el resto de las reglas de evidencia del proyecto, no menos, porque el riesgo de
+  alucinacion de un LLM leyendo codigo es mayor que el de un grep o un indice lexical. La regla
+  la hace cumplir el adapter mismo (`adapters/llm/openai_protocol.py::_parse_verdict`) ANTES de
+  devolver el resultado -- `lib/evaluate.py` no vuelve a validarla, confia en el contrato.
+- **El protocolo de wire del motor de IA es "estilo OpenAI" (`POST /embeddings`,
+  `POST /chat/completions`), no un SDK por proveedor.** Es el unico formato mainstream que cubre
+  embeddings Y generacion bajo la misma credencial -- lo hablan de forma nativa u
+  OpenAI-compatible tanto OpenAI (modo `external`, default) como los motores self-hosted
+  habituales (vLLM, Ollama, LM Studio). Un proveedor que NO hable este protocolo (ej. la Messages
+  API de Anthropic, sin embeddings) necesita su propio modulo nuevo bajo `adapters/llm/` -- ver
+  `adapters/llm/openai_protocol.py` para el razonamiento completo.
+- **`lib/index.py::semantic_search` y el `provider` opcional de `find_related()` en cada
+  conector de tracker reembeben todo el contenido en cada llamada, sin cache.** Mismo principio
+  que el resto del indice ("derivado, reconstruible") pero el costo/latencia real de esto contra
+  un volumen real de Context Base no se midio -- ver `ROADMAP.md`, "Huecos conocidos".
+- **`git grep` (usado por `adapters/code/git_log.py::search_content`, Fase 8) devuelve exit
+  code 1 cuando no hay ningun match -- no es un error.** Solo un exit code > 1 es una falla real
+  (`CodeProviderError`). Mismo gotcha de "un resultado vacio no es una excepcion" que ya aplica
+  al resto de los conectores de lectura en vivo.
 
 - **`linear_issues.py` lee la API key de la variable de entorno `LINEAR_API_KEY`,
   nunca de `.contextbase/config.yaml`** (mismo criterio que `gh` ya autenticado

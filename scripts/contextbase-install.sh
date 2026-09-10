@@ -122,9 +122,25 @@ code:                          # OPCIONAL -- sin esto, audit_gaps() igual corre,
                                 # resultado queda marcado approximation=true (ticket cerrado
                                 # sin verificar contra un commit mergeado, ver
                                 # docs/design/plan-auditoria-implementacion.md seccion 1.1).
+                                # evaluate_implementation() SI lo requiere -- sin esto, rechaza
+                                # con {"error": "code_not_configured"} (docs/adr/0022).
   repo_path: ""                  # path a un checkout LOCAL del repo de codigo del cliente
                                  # (puede ser distinto del repo Context Base)
   branch: ""                     # opcional -- default: la rama actual del checkout
+llm:                           # OPCIONAL -- motor de IA para busqueda semantica
+                                # (search_knowledge/find_related, docs/adr/0021) y
+                                # evaluate_implementation (docs/adr/0022). Sin esto,
+                                # search_knowledge/find_related degradan explicito a
+                                # lexical (docs/adr/0024) y evaluate_implementation
+                                # rechaza con {"error": "llm_not_configured"} -- no hay
+                                # fallback razonable para esa operacion sin un LLM.
+  provider: ""                   # external | self_hosted (adapters/llm/CONTRACT.md)
+  model: ""                       # modelo de chat/completions, usado por evaluate()
+  embedding_model: ""              # modelo de embeddings, usado por embed()/busqueda semantica
+  endpoint: ""                     # OBLIGATORIO si provider=self_hosted (sin default posible);
+                                   # opcional si provider=external (default: api.openai.com/v1)
+                                   # -- la API key NUNCA va aca, variable de entorno
+                                   # METIS_LLM_API_KEY (docs/adr/0024)
 YAMLEOF
 
 cat > "$TARGET/.gitignore" <<'GITEOF'

@@ -70,13 +70,20 @@ destilacion de estas cuatro fuentes (un rol agentico propio o una generalizacion
 de `skills/metis-ingest-meeting/SKILL.md`) queda fuera de este alcance -- ver
 `docs/adr/0020`.
 
-**Propuesto, no implementado todavia (`docs/adr/0021`-`0024`):** motor de busqueda semantica
-(embeddings, reemplaza TF-IDF en `search_knowledge`/`find_related`) + operacion nueva
-`evaluate_implementation(requirement_id)` (evaluacion de codigo via LLM bajo demanda, con
-evidencia obligatoria, para el caso sin ticket previo). Requiere un motor de IA configurable
-(proveedor externo con API key propia del cliente, o servido internamente -- `adapters/llm/
-CONTRACT.md`, `docs/adr/0024`). Marcado como prerequisito del proximo piloto real -- ver
-`ROADMAP.md`.
+**Fase 7 -- motor de busqueda semantica (`docs/adr/0021`, supersede a `docs/adr/0002`):**
+`search_knowledge()`/`find_related()` (tracker) usan embeddings en vez de TF-IDF/`difflib`
+cuando hay un motor de IA configurado (`llm:` en `.contextbase/config.yaml`) -- resuelve cruce
+de idioma y parafraseo, que el matching lexical nunca pudo resolver. Sin `llm:` configurado,
+ambos siguen funcionando exactamente igual que antes (degradacion explicita, `docs/adr/0024`).
+**Fase 8 -- `evaluate_implementation(requirement_id)` (`docs/adr/0022`):** octava operacion del
+contrato, evaluacion de codigo via LLM bajo demanda para el caso sin ticket previo -- arma
+contexto de codigo acotado por palabras clave (`adapters/code/git_log.py::search_content`, `git
+grep`, nunca el repo entero) y devuelve un veredicto siempre con evidencia puntual citada
+(archivo/linea/commit); sin esa evidencia, el propio adapter lo convierte en `inconclusive`.
+Convive con `audit_gaps()`, no lo reemplaza. Las dos fases comparten `adapters/llm/` -- interfaz
+comun (`embed`/`evaluate`) para proveedor externo (API key del cliente via
+`METIS_LLM_API_KEY`) o modelo servido internamente (`endpoint` obligatorio), ambos hablando el
+mismo protocolo "estilo OpenAI" -- cero dependencias nuevas (`docs/adr/0023`/`0024`).
 
 ## Estructura del repo
 
@@ -174,13 +181,19 @@ scripts/validate-entries.sh                        # sin argumentos, valida fixt
 Sale con status distinto de cero si alguna entrada no valida contra su schema --
 pensado para correr en el CI del propio repo del cliente.
 
-## Indice semantico (Fase 1, MVP lexical -- ver docs/adr/0002)
+## Indice (Fase 1 lexical -- docs/adr/0002; Fase 7 semantico -- docs/adr/0021)
 
 ```bash
 scripts/reindex.sh                          # reconstruye contra fixtures/contextbase/knowledge
 scripts/reindex.sh /ruta/a/knowledge         # o contra un Context Base real
 python3 lib/index.py search /ruta/a/knowledge/../.contextbase/index/index.json "SSO Okta"
 ```
+
+`lib/index.py::search()` (TF-IDF liviano) es el motor default. Con `llm:` configurado en
+`.contextbase/config.yaml` (`adapters/llm/CONTRACT.md`), `context_assistant/core.py`
+usa en su lugar `lib/index.py::semantic_search()` -- compara embeddings en vez de tokens,
+resolviendo el caso que TF-IDF nunca pudo: un pedido en un idioma distinto al del contenido, o
+parafraseado distinto. El contrato de `search_knowledge()` no cambia entre los dos motores.
 
 ## Servidor MCP (Fase 1, solo lectura -- seccion 8.1)
 
@@ -196,13 +209,16 @@ claude mcp add metis -- python3 /ruta/a/metis/context_assistant/mcp_server.py --
 ```
 
 Expone `search_knowledge(query, type?)`, `get_decision(id)`, `get_requirement(id)`,
-`list_open_questions()` y `audit_gaps(requirement_id?)` -- las cinco operaciones de
-lectura (las primeras cuatro de la especificacion original, seccion 8.1; `audit_gaps`
-se sumo en Fase 6, ver mas abajo). `list_open_questions()` devuelve las entradas en
-estado `disputed` (ver `docs/adr/0003-preguntas-abiertas-son-disputed.md`). La logica
-de las siete operaciones (estas cinco + las dos de escritura de la seccion siguiente)
-vive en `context_assistant/core.py` -- este archivo es solo el transporte MCP, lo
-mismo que sirve `context_assistant/api_server.py` (seccion 8.2, Fase 4) por HTTP.
+`list_open_questions()`, `audit_gaps(requirement_id?)` y `evaluate_implementation(requirement_id)`
+-- las seis operaciones de lectura (las primeras cuatro de la especificacion original, seccion
+8.1; `audit_gaps` se sumo en Fase 6 y `evaluate_implementation` en Fase 8, ver mas abajo).
+`list_open_questions()` devuelve las entradas en estado `disputed` (ver
+`docs/adr/0003-preguntas-abiertas-son-disputed.md`). `search_knowledge()` usa embeddings en vez
+de TF-IDF cuando hay un motor de IA configurado (`llm:` en `.contextbase/config.yaml`, ver
+`docs/adr/0021`) -- degrada explicito a busqueda lexical si no. La logica de las ocho operaciones
+(estas seis + las dos de escritura de la seccion siguiente) vive en `context_assistant/core.py`
+-- este archivo es solo el transporte MCP, lo mismo que sirve `context_assistant/api_server.py`
+(seccion 8.2, Fase 4) por HTTP.
 
 ## Write Agent (Fase 2 -- seccion 5.2/8.1/2)
 
@@ -369,6 +385,27 @@ Tambien expuesto por MCP (`audit_gaps(requirement_id?)`) y por API REST
 (`GET /audit-gaps?requirement_id=<id?>`) -- misma logica de `context_assistant/core.py`
 por debajo, sin reimplementar nada (seccion 5.2). Decisiones de implementacion (que
 tracker primero, el enum `source` nuevo, como leer codigo) en `docs/adr/0019`.
+
+## Evaluacion de codigo via LLM (Fase 8 -- sin ticket previo, `docs/adr/0022`)
+
+```
+evaluate_implementation(requirement_id)   # via MCP, o GET /evaluate-implementation?requirement_id=... (API REST)
+```
+
+Complementa `audit_gaps()` para el caso en que un `requirement` no tiene NINGUN ticket (ni
+citado ni por matching) -- sin un `ref` de tracker, el conector de codigo no tiene nada que
+grepear. Esta operacion arma un contexto de codigo acotado por palabras clave del propio
+requirement (`adapters/code/git_log.py::search_content`, `git grep` sobre el checkout, nunca el
+repo entero) y le pide un veredicto a un motor de IA (`adapters/llm/CONTRACT.md::evaluate`) --
+siempre con evidencia puntual citada (archivo/linea/commit); un veredicto sin esa evidencia se
+convierte en `inconclusive` ANTES de salir del adapter. `deterministic` siempre `false` -- nunca
+se trata como un hecho equivalente a `audit_gaps()` (grep + estado de tracker, deterministico).
+Convive con `audit_gaps()`, no lo reemplaza -- el chequeo barato es siempre el primer intento.
+
+Requiere `code:` Y `llm:` configurados en `.contextbase/config.yaml` -- a diferencia de
+`audit_gaps()` (que corre sin `code:`, marcando `approximation`), esta operacion no tiene un
+modo aproximado: sin cualquiera de los dos, devuelve `{"error": "code_not_configured"}` /
+`{"error": "llm_not_configured"}` explicito.
 
 ## Correr los tests de este repo
 

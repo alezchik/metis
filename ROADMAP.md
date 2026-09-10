@@ -88,6 +88,22 @@
 
 ## Huecos conocidos (no bloqueantes)
 
+- **`lib/index.py::semantic_search` y `find_related()` con `provider` reembeben todo el
+  contenido en cada llamada, sin cache.** Mismo principio que el resto del indice ("derivado,
+  reconstruible"), pero el costo/latencia real de esto contra un volumen de Context Base real
+  (no `fixtures/`) no se midio -- si se vuelve un problema, considerar un cache de embeddings
+  por hash de contenido (invalidado automaticamente si el contenido cambia).
+- **`adapters/llm/external.py`/`self_hosted.py` solo implementan el protocolo "estilo OpenAI"
+  (`POST /embeddings`, `POST /chat/completions`).** Cubre OpenAI y la mayoria de motores
+  self-hosted (vLLM, Ollama, LM Studio), pero un proveedor externo que hable un protocolo
+  distinto (ej. la Messages API de Anthropic, que no ofrece embeddings) necesita su propio
+  modulo nuevo bajo `adapters/llm/` (mismo contrato, ver `CONTRIBUTING.md`).
+- **Filtro de contenido sensible/PII antes de mandar codigo/requirements a un proveedor externo
+  de IA -- sin resolver.** `docs/adr/0023` dejo esto explicitamente como pregunta abierta: el
+  mismo filtro que ya existe para la ingesta de reuniones (`docs/adr/0018`) no se aplico todavia
+  al contenido que sale hacia `adapters/llm/external.py`.
+- **Quien paga la inferencia de embeddings/evaluacion en produccion -- sin resolver.** Pregunta
+  de negocio explicitamente abierta (`docs/adr/0023`), sin fecha limite.
 - **Umbral de confianza/relevancia sin validar contra uso real.**
   `ingestion.confidence_threshold` arranca en `0.6` (default conservador,
   `scripts/contextbase-install.sh`), pero ningun valor se probo todavia contra
@@ -154,40 +170,57 @@ desplegados. Las tres preguntas de diseno que quedaban abiertas se resolvieron a
 implementar -- ver `docs/adr/0019` y la seccion 8 (actualizada) de
 `docs/design/plan-auditoria-implementacion.md`.
 
-## Propuesto (bloquea el proximo piloto real): busqueda semantica + evaluacion de codigo via LLM
+## Motor de IA: busqueda semantica + evaluacion de codigo via LLM (`docs/adr/0021`-`0024`)
 
-Surge de revisar en detalle por que `audit_gaps()` puede fallar contra un proyecto real: el
-matching de `find_related()` (tracker) y de `search_knowledge()` es literal/lexical
-(`docs/adr/0002`) -- no reconoce un pedido en español contra un ticket en ingles, ni dos frases
-parafraseadas distinto. Y sin ticket previo, `audit_gaps()` no tiene forma de confirmar que algo
-ya esta implementado, porque el conector de codigo (`adapters/code/git_log.py`) solo busca un id
-literal en commits.
+Surgio de revisar en detalle por que `audit_gaps()` puede fallar contra un proyecto real: el
+matching de `find_related()` (tracker) y de `search_knowledge()` era literal/lexical
+(`docs/adr/0002`) -- no reconocia un pedido en español contra un ticket en ingles, ni dos frases
+parafraseadas distinto. Y sin ticket previo, `audit_gaps()` no tenia forma de confirmar que algo
+ya estaba implementado, porque el conector de codigo (`adapters/code/git_log.py`) solo busca un
+id literal en commits. Implementado de punta a punta, prerequisito del piloto real (no posterior
+a el, decision que revierte la secuencia sugerida al principio) -- la herramienta tiene que
+funcionar contra un proyecto que ya esta corriendo, no solo uno que arranca de cero.
 
-Dos capacidades nuevas, ambas en estado `propuesta` (`docs/adr/0021`-`0024`), **prerequisito
-del piloto real, no posterior a el** -- la herramienta tiene que funcionar contra un proyecto que
-ya esta corriendo, no solo uno que arranca de cero:
+- **Motor de busqueda semantica (embeddings)** -- `lib/index.py::semantic_search` (reemplaza
+  TF-IDF en `search_knowledge()` cuando hay `llm:` configurado) y el parametro opcional
+  `provider` de `find_related()` en los tres conectores de tracker (`docs/adr/0021`, supersede
+  a `docs/adr/0002`). Sin `llm:` configurado, ambos siguen funcionando exactamente igual que
+  antes (lexical/difflib) -- degradacion explicita, nunca silenciosa (`docs/adr/0024`).
+- **`evaluate_implementation(requirement_id)`** -- octava operacion del contrato
+  (`lib/evaluate.py`), evaluacion de codigo via LLM bajo demanda para el caso sin ticket previo
+  (`docs/adr/0022`): arma contexto de codigo acotado por palabras clave del propio requirement
+  (`adapters/code/git_log.py::search_content`, `git grep` sobre el checkout, nunca el repo
+  entero) y le pide un veredicto a un LLM -- siempre con evidencia puntual citada (archivo/
+  linea/commit), nunca "si/no" sin respaldo; sin esa evidencia, el propio adapter convierte el
+  veredicto en `inconclusive` antes de devolverlo. Convive con `audit_gaps()`, no lo reemplaza.
+- **`adapters/llm/` (`docs/adr/0023`/`0024`)** -- interfaz comun (`embed`/`evaluate`) para dos
+  modos: `external` (proveedor de terceros, API key del cliente via `METIS_LLM_API_KEY`, nunca
+  en `config.yaml`) y `self_hosted` (modelo del cliente, `endpoint` obligatorio). Los dos hablan
+  el mismo protocolo "estilo OpenAI" (`POST /embeddings`, `POST /chat/completions`,
+  `adapters/llm/openai_protocol.py`) -- cero dependencias nuevas (stdlib `urllib`, mismo criterio
+  que `adapters/tracker/linear_issues.py`). Fail-fast sin default silencioso: sin `llm:`
+  configurado, la busqueda degrada a lexical; `evaluate_implementation` rechaza con un error
+  explicito (no tiene fallback razonable).
 
-- **Motor de busqueda semantica (embeddings)**, reemplazando TF-IDF en `search_knowledge()` y
-  `find_related()` (`docs/adr/0021`).
-- **`evaluate_implementation(requirement_id)`**, evaluacion de codigo via LLM bajo demanda, con
-  evidencia obligatoria -- para el caso sin ticket previo (`docs/adr/0022`).
+Probado (`tests/test-llm-engine.sh`, `tests/test-semantic-search.sh`,
+`tests/test-evaluate-implementation.sh`) contra un transporte HTTP simulado -- nunca pega contra
+una API de IA real, mismo patron que `tests/test-linear-tracker.sh`.
 
-Ambas necesitan un motor de IA configurable de dos formas (proveedor externo con API key propia
-del cliente, o servido internamente sin salir a terceros -- `docs/adr/0024`), lo que le agrega a
-Metis una superficie de red saliente que hoy no tiene (`docs/adr/0023`). Preguntas de negocio
-abiertas: quien paga la inferencia en produccion, y si el contenido que sale hacia un proveedor
-externo deberia pasar por el mismo filtro de contenido sensible/PII que ya existe para reuniones
-(`docs/adr/0018`).
+Preguntas de negocio que quedaron explicitamente abiertas (no bloquean lo ya implementado): quien
+paga la inferencia en produccion, y si el contenido que sale hacia un proveedor externo deberia
+pasar por el mismo filtro de contenido sensible/PII que ya existe para reuniones
+(`docs/adr/0018`) -- ver "Huecos conocidos" mas abajo.
 
 ## Proximo hito: un piloto real
 
-**Depende de la seccion anterior (busqueda semantica + evaluacion de codigo) estando implementada primero.** Todo lo de arriba se valido contra `fixtures/` -- un Context Base de mentira, una
+Todo lo de arriba se valido contra `fixtures/` -- un Context Base de mentira, una
 transcripcion de mentira. El proximo paso real es levantar un Context Base contra
 un proyecto real: un repo Git real del cliente, una API key real emitida para ese
 proyecto, un `ingestion.capture_store_dir` configurado para ese deployment, y
-correr el pipeline de ingesta contra una reunion real, y configurar `tracker`/`code`
-en `.contextbase/config.yaml` para probar `audit_gaps` contra el tracker y el repo de
-codigo reales de ese proyecto. Nada de este repo bloquea que eso arranque.
+correr el pipeline de ingesta contra una reunion real, y configurar `tracker`/`code`/`llm`
+en `.contextbase/config.yaml` para probar `audit_gaps`/`evaluate_implementation` contra el
+tracker, el repo de codigo y el motor de IA reales de ese proyecto. Nada de este repo bloquea
+que eso arranque.
 
 Un segundo hito, independiente y sin fecha, es la integracion de punta a punta con
 Dedalo/Talos -- el contrato ya esta documentado (`docs/design/frontera-ecosistema-talos.md`,

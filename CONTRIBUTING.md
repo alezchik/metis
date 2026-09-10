@@ -115,6 +115,21 @@ se agrega cobertura de test para el (mismo motivo que `github_issues.py`: pegari
 contra la fuente real, o dependeria de que una credencial este configurada en el
 entorno de CI).
 
+## Agregar un modo/proveedor nuevo al motor de IA
+
+Familia distinta de los conectores de arriba (`adapters/llm/CONTRACT.md`, docs/adr/0021/0022/
+0023/0024): no trae contenido para destilar ni consulta estado de un sistema externo -- da
+`embed(text)`/`evaluate(prompt, context)` para busqueda semantica y evaluate_implementation.
+`external.py`/`self_hosted.py` ya cubren cualquier proveedor que hable el protocolo "estilo
+OpenAI" (`adapters/llm/openai_protocol.py`) con solo cambiar `llm.endpoint` en
+`.contextbase/config.yaml` -- no hace falta un modulo nuevo para eso. Un modulo nuevo solo hace
+falta para un proveedor que hable un protocolo DISTINTO (ej. la Messages API de Anthropic, sin
+embeddings): mismo contrato (`embed`/`evaluate`), misma regla de evidencia obligatoria (regla 1
+-- un `verdict` sin evidencia puntual se convierte en `inconclusive` ANTES de salir del adapter,
+nunca se delega esa validacion a quien llama), y se agrega la rama correspondiente en
+`lib/llm_config.py::build_llm_provider` -- sin tocar `context_assistant/core.py`,
+`lib/index.py` ni `lib/evaluate.py` (el punto de la interfaz comun).
+
 ## Agregar un tipo de entrada nuevo (mas alla de decision/requirement/risk)
 
 Hoy solo `decision`, `requirement` y `risk` tienen flujo de propuesta (via

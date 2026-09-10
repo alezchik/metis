@@ -17,6 +17,7 @@ Endpoints:
   GET  /requirements/<id>                -> get_requirement
   GET  /open-questions                   -> list_open_questions
   GET  /audit-gaps?requirement_id=<id?>  -> audit_gaps (Fase 6, docs/adr/0016)
+  GET  /evaluate-implementation?requirement_id=<id>  -> evaluate_implementation (Fase 8, docs/adr/0022)
   POST /decisions            {payload}   -> propose_decision
   POST /entries/<id>/updates {payload}   -> propose_update
 
@@ -119,6 +120,15 @@ def make_handler(deployment: Deployment, api_key: str):
             elif parts == ["audit-gaps"]:
                 requirement_id = (qs.get("requirement_id") or [None])[0]
                 self._send_json(200, deployment.audit_gaps(requirement_id))
+            elif parts == ["evaluate-implementation"]:
+                requirement_id = (qs.get("requirement_id") or [None])[0]
+                if not requirement_id:
+                    self._send_json(
+                        400,
+                        {"error": "missing_requirement_id", "message": "falta el query param requirement_id."},
+                    )
+                else:
+                    self._send_json(200, deployment.evaluate_implementation(requirement_id))
             else:
                 self._send_json(404, {"error": "not_found", "message": f"no existe la ruta {parsed.path!r}."})
 

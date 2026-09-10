@@ -27,8 +27,11 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from lib.index import build_index, get_by_id, list_disputed, search  # noqa: E402
+from adapters.llm.errors import LLMConfigError, LLMProviderError  # noqa: E402
 from lib.audit import audit_gaps as _audit_gaps  # noqa: E402
+from lib.evaluate import evaluate_implementation as _evaluate_implementation  # noqa: E402
+from lib.index import build_index, get_by_id, list_disputed, search, semantic_search  # noqa: E402
+from lib.llm_config import build_llm_provider, load_llm_config  # noqa: E402
 from lib.write_agent import (  # noqa: E402
     WriteAgentError,
     propose_decision as _propose_decision,
@@ -89,9 +92,37 @@ class Deployment:
     def _current_index(self) -> dict[str, Any]:
         return build_index(self.knowledge_dir)
 
+    def _llm_provider_or_none(self):
+        """None si no hay 'llm:' configurado (degradacion valida, docs/adr/0024) --
+        o si la config esta mal formada, en cuyo caso avisa por stderr y tambien
+        degrada (search_knowledge nunca cambia de forma de retorno por un error de
+        config, ver docs/adr/0021: "el contrato no cambia")."""
+        try:
+            llm_cfg = load_llm_config(self.knowledge_dir)
+        except LLMConfigError as exc:
+            print(
+                f"AVISO: .contextbase/config.yaml seccion 'llm:' invalida ({exc}) -- "
+                f"degradando a busqueda lexical",
+                file=sys.stderr,
+            )
+            return None
+        return build_llm_provider(llm_cfg) if llm_cfg is not None else None
+
     def search_knowledge(self, query: str, type: str | None = None) -> list[dict]:
-        """Retrieval lexical sobre Context Base, con cita (archivo + commit). Lista
-        vacia si no hay ninguna entrada relacionada -- nunca inventa (principio 3)."""
+        """Retrieval sobre Context Base, con cita (archivo + commit) -- semantico
+        (embeddings) si hay un motor de IA configurado (docs/adr/0021), lexical
+        (TF-IDF) si no, degradado explicito (docs/adr/0024). Lista vacia si no hay
+        ninguna entrada relacionada -- nunca inventa (principio 3). El contrato no
+        cambia entre los dos motores -- mismo tipo de retorno en ambos casos."""
+        provider = self._llm_provider_or_none()
+        if provider is not None:
+            try:
+                return semantic_search(self._current_index(), query, provider, entry_type=type)
+            except LLMProviderError as exc:
+                print(
+                    f"AVISO: busqueda semantica fallo ({exc}) -- degradando a lexical para esta consulta",
+                    file=sys.stderr,
+                )
         return search(self._current_index(), query, entry_type=type)
 
     def get_decision(self, id: str) -> dict:
@@ -125,6 +156,19 @@ class Deployment:
         {"error": "tracker_not_configured", ...} en vez de fallar -- el resto de
         Metis sigue funcionando igual, esta es la unica operacion afectada."""
         return _audit_gaps(self.knowledge_dir, requirement_id=requirement_id)
+
+    def evaluate_implementation(self, requirement_id: str) -> dict:
+        """Fase 8 (docs/adr/0022): evaluacion de codigo via LLM bajo demanda, para
+        el caso en que audit_gaps() no encontro ningun ticket (ni citado ni por
+        matching). Siempre con evidencia puntual citada (archivo/linea/commit) --
+        un veredicto sin esa evidencia se convierte en 'inconclusive' ANTES de
+        llegar aca (adapters/llm/CONTRACT.md, regla 1). 'deterministic' siempre
+        False -- nunca se trata como un hecho equivalente a audit_gaps. Solo
+        lectura -- no requiere writes_enabled, nada de su resultado se escribe de
+        vuelta a Context Base. Sin 'code:' o sin 'llm:' configurado, devuelve un
+        error explicito -- a diferencia de audit_gaps, esta operacion no tiene un
+        modo aproximado (docs/adr/0024)."""
+        return _evaluate_implementation(self.knowledge_dir, requirement_id)
 
     def list_open_questions(self) -> list[dict]:
         """Entradas en estado 'disputed' (seccion 4.3, docs/adr/0003). Lista vacia si

@@ -42,6 +42,8 @@ import urllib.error
 import urllib.request
 from typing import Any, Callable
 
+from adapters.llm.similarity import cosine_similarity
+
 _API_URL = "https://api.linear.app/graphql"
 _ENV_VAR = "LINEAR_API_KEY"
 _MAX_ISSUES_SCANNED = 1000  # limite defensivo de paginacion para find_related
@@ -126,8 +128,14 @@ def find_related(
     query_hint: str,
     min_similarity: float = 0.5,
     transport: Callable[[str, dict[str, Any], str], dict[str, Any]] = _default_transport,
+    provider: Any | None = None,
 ) -> list[dict[str, Any]]:
+    """Similitud de titulo -- lexical por default, semantica si se pasa un
+    'provider' de motor de IA (adapters/llm/CONTRACT.md, docs/adr/0021). Ver
+    adapters/tracker/file_tracker.py::find_related para el razonamiento completo --
+    mismo patron aca, el contrato no cambia."""
     needle = (query_hint or "").lower().strip()
+    query_vec = provider.embed(needle) if provider is not None else None
     hits: list[dict[str, Any]] = []
     after = None
     scanned = 0
@@ -137,7 +145,10 @@ def find_related(
         nodes = issues.get("nodes") or []
         for node in nodes:
             title = (node.get("title") or "").lower().strip()
-            ratio = difflib.SequenceMatcher(None, needle, title).ratio()
+            if provider is not None:
+                ratio = cosine_similarity(query_vec, provider.embed(title))
+            else:
+                ratio = difflib.SequenceMatcher(None, needle, title).ratio()
             if ratio >= min_similarity:
                 hits.append(
                     {
