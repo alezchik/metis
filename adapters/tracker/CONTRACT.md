@@ -1,0 +1,82 @@
+# Conectores de tracker -- contrato
+
+Familia de conectores de **lectura en vivo** (`docs/adr/0016`), distinta de
+`adapters/ingestion/CONTRACT.md`: esos traen contenido crudo para destilar en una
+entrada nueva de Context Base; estos consultan el estado ACTUAL de un sistema
+externo en el momento de cada pregunta, y ese estado nunca se guarda como hecho
+propio. `lib/audit.py` es lo unico que conoce esta forma -- el resto del pipeline de
+auditoria no le importa que tracker concreto respondio.
+
+## Operaciones
+
+```
+find_related(query_hint: str) -> list[dict]   # candidatos, sin cita explicita
+get_status(ref: str) -> dict                  # estado actual, siempre en vivo
+```
+
+### `find_related(query_hint)`
+
+Busca tickets cuyo titulo se parezca a `query_hint` (normalmente el titulo de un
+`requirement`) -- se usa cuando no hay una cita explicita (`evidence` con
+`source: "tracker"`) que ya diga que ticket corresponde. Devuelve una lista de:
+
+```json
+{"ref": "42", "title": "...", "url": "https://...", "state": "open", "similarity": 0.83}
+```
+
+Ordenada por `similarity` descendente. Lista vacia si no hay ningun ticket
+remotamente parecido -- nunca un candidato inventado.
+
+### `get_status(ref)`
+
+Trae el estado actual de un ticket puntual, identificado por `ref` (un id/numero
+estable del tracker, nunca una posicion o indice que cambia entre corridas):
+
+```json
+{"exists": true, "ref": "42", "title": "...", "state": "open", "url": "https://..."}
+```
+
+Si el ticket ya no existe (fue borrado, o el `ref` nunca existio): `{"exists":
+false, "ref": "42", "title": null, "state": null, "url": null}` -- **nunca** una
+excepcion que un llamador pueda confundir con "el tracker no esta disponible".
+
+## Reglas (sin excepcion)
+
+1. **Solo lectura.** Ningun conector de tracker escribe, comenta ni cierra nada del
+   lado de la fuente -- ni siquiera para marcar "ya auditado". Ese estado, si hiciera
+   falta, vive del lado de Metis (y ahi tampoco se cachea, ver regla 4).
+2. **Ausencia explicita, nunca confundida con fuente inalcanzable.** `get_status` de
+   un ticket que no existe devuelve `{"exists": false, ...}` -- un resultado valido,
+   no un error. Si en cambio el propio tracker no responde (credencial vencida, API
+   caida, `gh` no instalado/autenticado), el conector levanta una excepcion explicita
+   (`TrackerProviderError` o equivalente) -- nunca un `{"exists": false}` que
+   disfrace "no se pudo preguntar" como "no existe".
+3. **Alcance explicito por proyecto (`docs/adr/0012`).** La credencial/config de un
+   conector de tracker es de este proyecto/repo puntual (un `repo: "owner/repo"` de
+   GitHub, un `tickets_file` de un unico cliente) -- nunca una que cruce a otros
+   proyectos/clientes. A diferencia de Notion (`docs/adr/0013`), aca el riesgo de
+   fuga entre proyectos no aplica porque el alcance de la credencial ya es de un
+   solo repo/tracker, no de un workspace completo.
+4. **`get_status` nunca lee de una cita guardada en Context Base.** El unico uso de
+   una cita (`evidence` con `source: "tracker"`) es como pista de que `ref` ir a
+   consultar -- el estado en si siempre se vuelve a pedir en vivo, en cada llamada.
+   Ver `docs/adr/0016` para el porque (nunca cachear estado de un sistema externo
+   como si fuera propio).
+
+## Conectores implementados
+
+- **`file_tracker.py`** -- lee tickets de un archivo JSON plano en disco (lista de
+  `{ref, title, state, url}`). Mismo patron de testing offline por archivo que ya usa
+  `adapters/ingestion/meeting_file.py` -- permite construir y probar
+  `lib/audit.py::audit_gaps` completo sin depender de ninguna API real todavia. Sirve
+  ademas como opcion real para un cliente cuyo "tracker" es, literalmente, un archivo
+  (proyectos chicos, o una migracion progresiva).
+- **`github_issues.py`** -- lee issues de un repo de GitHub real via `gh issue
+  list`/`gh issue view` (mismo binario que ya usa `adapters/git_provider.py`).
+  Conector de referencia para un deployment real -- no ejercitado por los tests de
+  este repo (serian no-herméticos: pegarian contra GitHub de verdad o dependerian de
+  que `gh` este instalado y autenticado en el entorno que corre los tests, ver
+  `CLAUDE.md`), pero implementa exactamente el mismo contrato que `file_tracker.py`.
+
+Configuracion (`.contextbase/config.yaml`, seccion `tracker:`) en
+`docs/design/plan-auditoria-implementacion.md`.

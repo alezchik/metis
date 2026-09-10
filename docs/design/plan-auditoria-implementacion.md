@@ -1,6 +1,6 @@
 # Plan de implementación — auditoría de brechas (tracker + código en vivo)
 
-Fecha: 2026-09-09. Estado: borrador aceptado, sin código todavía. Formaliza
+Fecha: 2026-09-09 (implementado 2026-09-10, ver `docs/adr/0019`). Estado: implementado. Formaliza
 `docs/adr/0016-auditoria-brechas-tracker-codigo-en-vivo.md` — este documento tiene el
 detalle que ese ADR deja afuera a propósito.
 
@@ -160,25 +160,28 @@ Reglas (mismo espíritu que la ingesta, adaptado):
 Cuando se implementen, estos contratos viven en `adapters/tracker/CONTRACT.md` y
 `adapters/code/CONTRACT.md` — no se crean todavía en este plan.
 
-## 8. Preguntas de diseño abiertas
+## 8. Preguntas de diseño — resueltas al implementar (`docs/adr/0019`)
 
-- **Qué tracker primero.** GitHub Issues es el más simple de probar (mismo
-  ecosistema que ya usa `adapters/git_provider.py`); Jira/Linear quedan para cuando
-  haya un cliente real que los use — mismo criterio que ya se usó para no construir
-  conectores de ingesta sin un caso concreto (`docs/adr/0010`).
-- **Enum `source` nuevo (`tracker`).** Cambio de contrato de schema — su propio ADR
-  al implementarlo, mismo patrón que `docs/adr/0015` dejó pendiente para
-  `spreadsheet`/`image`.
-- **Cómo se lee "código" concretamente** — grep/búsqueda de texto simple (barato,
-  determinístico) vs. reusar algo más parecido a la búsqueda semántica del
-  Investigator de Dédalo (más preciso, más costoso, y duplica lógica que ya existe
-  en `talosprd`). Augusto ya decidió que la duplicación con Dédalo no es un problema
-  bloqueante — queda como decisión de implementación, no de arquitectura.
-- **Formato exacto del reporte Markdown** (sección 6) — tabla por categoría,
-  agrupado por prioridad sugerida; se define al implementar el script.
+Las tres quedaron resueltas al construir esto — ver `docs/adr/0019` para el
+detalle y el porqué de cada una:
+
+- **Qué tracker primero.** Los dos: `adapters/tracker/file_tracker.py` (conector de
+  referencia, probado de punta a punta) y `adapters/tracker/github_issues.py`
+  (conector real via `gh`, no ejercitado por los tests hermeticos de este repo).
+- **Enum `source` nuevo (`tracker`).** Agregado a los seis `schemas/*.schema.json`
+  (y su copia instalada en `fixtures/contextbase/.contextbase/schema/`) y a
+  `schemas/ingestion-candidate.schema.json`.
+- **Cómo se lee "código" concretamente** — grep simple: `adapters/code/git_log.py`
+  usa `git log --grep`/similitud lexical de asunto de commit sobre un checkout
+  local, sin ninguna credencial de API.
+
+El formato exacto del reporte Markdown (sección 6) quedó definido en
+`lib/audit_gaps_cli.py::render_markdown` — una sección por categoría, con la
+prioridad sugerida y las discrepancias explícitas inline por item.
 
 ## Referencias
 
-`docs/adr/0016-auditoria-brechas-tracker-codigo-en-vivo.md`, `docs/adr/0008`
-(dedup/match), `docs/adr/0006` (degradación con gracia), `docs/adr/0012` (alcance
-explícito), `ROADMAP.md`.
+`docs/adr/0016-auditoria-brechas-tracker-codigo-en-vivo.md`, `docs/adr/0019`
+(decisiones de implementacion: conectores y enum), `docs/adr/0008` (dedup/match),
+`docs/adr/0006` (degradación con gracia), `docs/adr/0012` (alcance explícito),
+`ROADMAP.md`.

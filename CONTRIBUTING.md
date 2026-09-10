@@ -91,6 +91,25 @@ enfoque recomendado por tipo de archivo, incluyendo que dependencia nueva justif
 uno (regla de arriba, "sin dependencias nuevas sin justificarlas") y cuando una falla de
 extraccion (no solo de fuente inalcanzable) tiene que ser explicita.
 
+## Agregar un conector de lectura en vivo (tracker/codigo)
+
+Familia distinta de los conectores de ingesta de arriba (`adapters/tracker/CONTRACT.md`,
+`adapters/code/CONTRACT.md`): no traen contenido para destilar, consultan estado
+ACTUAL de un sistema externo en el momento de cada pregunta -- y ese estado nunca se
+cachea como hecho propio en Context Base (`docs/adr/0016`, regla que nunca se
+afloja). Un `get_status(ref)` que no encuentra el `ref` devuelve `{"exists": false,
+...}` (o `{"merged": false, "commits": []}` para codigo) -- un resultado valido, no
+un error; el error explicito es para cuando la fuente misma no responde (credencial
+vencida, `gh` no instalado, repo_path que no es un checkout git real). Ver
+`adapters/tracker/file_tracker.py`/`github_issues.py` y `adapters/code/git_log.py`
+como referencia, y `docs/adr/0019` para las decisiones de implementacion ya tomadas.
+
+Si tu conector nuevo usa una API real (a diferencia de `file_tracker.py`, que lee de
+un archivo local para poder probarse hermeticamente), documentar en el PR por que no
+se agrega cobertura de test para el (mismo motivo que `github_issues.py`: pegaria
+contra la fuente real, o dependeria de que una credencial este configurada en el
+entorno de CI).
+
 ## Agregar un tipo de entrada nuevo (mas alla de decision/requirement/risk)
 
 Hoy solo `decision`, `requirement` y `risk` tienen flujo de propuesta (via

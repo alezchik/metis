@@ -26,7 +26,7 @@
         "additionalProperties": false,
         "required": ["source", "ref"],
         "properties": {
-          "source": { "type": "string", "enum": ["meeting", "slack", "mail", "confluence", "notion", "document", "code", "manual"] },
+          "source": { "type": "string", "enum": ["meeting", "slack", "mail", "confluence", "notion", "document", "code", "tracker", "manual"] },
           "ref": { "type": "string", "minLength": 1 },
           "locator": { "type": "string" }
         }

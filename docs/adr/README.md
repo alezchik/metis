@@ -54,3 +54,4 @@ nada mas, a `superseded by ADR-NNNN`.
 | [0016](0016-auditoria-brechas-tracker-codigo-en-vivo.md) | Auditoria de brechas: Metis lee tracker y codigo en vivo, nunca cachea su estado, funciona sin Dedalo/Talos |
 | [0017](0017-elimina-slack-app-y-web-app.md) | Se elimina del alcance el Slack app y la web app: quedan dos entradas, no cuatro (MCP + API REST) |
 | [0018](0018-filtro-contenido-sensible-y-store-de-capturas.md) | Filtro de contenido sensible/PII en destilacion de reuniones + ubicacion y control de acceso reales del store de capturas |
+| [0019](0019-implementacion-auditoria-brechas.md) | Implementacion de la auditoria de brechas: conectores file/github/git_log, `tracker` en el enum de evidencia |

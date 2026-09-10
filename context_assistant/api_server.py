@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 Metis -- Context Assistant, transporte API REST (seccion 8.2). Espejo delgado de las
-mismas seis operaciones que el transporte MCP (context_assistant/mcp_server.py) --
+mismas siete operaciones que el transporte MCP (context_assistant/mcp_server.py) --
 los dos llaman unicamente a context_assistant/core.py, ninguno reimplementa nada
-(seccion 5.2: "no hay cuatro implementaciones, hay una logica y cuatro transportes").
+(seccion 5.2: "no hay cuatro implementaciones, hay una logica y dos transportes").
 Pensado para automatizaciones del cliente que no hablan MCP.
 
 Autenticacion: una API key por proyecto (header 'X-Api-Key'), nunca compartida entre
@@ -16,6 +16,7 @@ Endpoints:
   GET  /decisions/<id>                   -> get_decision
   GET  /requirements/<id>                -> get_requirement
   GET  /open-questions                   -> list_open_questions
+  GET  /audit-gaps?requirement_id=<id?>  -> audit_gaps (Fase 6, docs/adr/0016)
   POST /decisions            {payload}   -> propose_decision
   POST /entries/<id>/updates {payload}   -> propose_update
 
@@ -115,6 +116,9 @@ def make_handler(deployment: Deployment, api_key: str):
                 self._send_json(200, deployment.get_requirement(parts[1]))
             elif parts == ["open-questions"]:
                 self._send_json(200, deployment.list_open_questions())
+            elif parts == ["audit-gaps"]:
+                requirement_id = (qs.get("requirement_id") or [None])[0]
+                self._send_json(200, deployment.audit_gaps(requirement_id))
             else:
                 self._send_json(404, {"error": "not_found", "message": f"no existe la ruta {parsed.path!r}."})
 

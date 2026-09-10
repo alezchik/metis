@@ -49,6 +49,23 @@
   codigo nuevo en este repo (`docs/adr/0011`). Lo que falta del lado de esos otros
   dos repos esta documentado en detalle en `docs/handoff/` (ver "Proximo hito" mas
   abajo).
+- **Fase 6 -- Auditoria de brechas (tracker + codigo en vivo).**
+  `lib/audit.py::audit_gaps` cruza los `requirement` `confirmed` de Context Base
+  contra un tracker (`adapters/tracker/file_tracker.py`, conector de referencia
+  probado de punta a punta; `adapters/tracker/github_issues.py`, conector real via
+  `gh`, no ejercitado por los tests hermeticos) y el codigo
+  (`adapters/code/git_log.py`, `git log --grep` sobre un checkout local) EN VIVO en
+  cada consulta -- nunca cachea el resultado (`docs/adr/0016`). Tres categorias
+  (implementado / con ticket sin implementar / sin ticket), discrepancia explicita
+  si una cita a un ticket ya no resuelve, aproximacion marcada si falta el conector
+  de codigo, y priorizacion sugerida por `depends_on` + severidad de riesgo
+  relacionado + antiguedad (nunca automatica, seccion 5 del plan). Expuesto por
+  MCP/API (`audit_gaps(requirement_id?)`, septima operacion del contrato) y por un
+  script standalone (`scripts/audit-gaps.sh`) que escribe un reporte Markdown a
+  disco -- funciona sin Dedalo ni Talos desplegados. Decisiones de implementacion
+  (que tracker primero, el enum `source` nuevo, como leer codigo) en
+  `docs/adr/0019`. Probado (`tests/test-audit.sh`, ampliacion de
+  `tests/test-mcp-protocol.sh` y `tests/test-api-server.sh`).
 
 ## Huecos conocidos (no bloqueantes)
 
@@ -108,14 +125,25 @@ wireado de punta a punta por `scripts/ingest-capture.sh` +
 corriera esto en produccion. Ya no bloquea correr el conector de reuniones
 contra una transcripcion real.
 
+## Resuelto: auditoria de brechas (`docs/adr/0016`, `docs/adr/0019`)
+
+Ver la entrada de Fase 6 en "Hecho" arriba. Las dos reglas centrales de
+`docs/adr/0016` se cumplen tal como se decidieron: nunca se cachea estado de
+tracker/codigo como hecho propio (solo cita historica opcional via `evidence`), y la
+capacidad funciona 100% del lado de Metis, sin depender de que Dedalo/Talos esten
+desplegados. Las tres preguntas de diseno que quedaban abiertas se resolvieron al
+implementar -- ver `docs/adr/0019` y la seccion 8 (actualizada) de
+`docs/design/plan-auditoria-implementacion.md`.
+
 ## Proximo hito: un piloto real
 
 Todo lo de arriba se valido contra `fixtures/` -- un Context Base de mentira, una
 transcripcion de mentira. El proximo paso real es levantar un Context Base contra
 un proyecto real: un repo Git real del cliente, una API key real emitida para ese
 proyecto, un `ingestion.capture_store_dir` configurado para ese deployment, y
-correr el pipeline de ingesta contra una reunion real. Nada de este repo bloquea
-que eso arranque.
+correr el pipeline de ingesta contra una reunion real, y configurar `tracker`/`code`
+en `.contextbase/config.yaml` para probar `audit_gaps` contra el tracker y el repo de
+codigo reales de ese proyecto. Nada de este repo bloquea que eso arranque.
 
 Un segundo hito, independiente y sin fecha, es la integracion de punta a punta con
 Dedalo/Talos -- el contrato ya esta documentado (`docs/design/frontera-ecosistema-talos.md`,
@@ -142,32 +170,6 @@ imagenes. Puntos ya resueltos por el ADR, no abiertos a discusion en la implemen
 Preguntas de diseno todavia abiertas (documentadas en el plan, no bloquean arrancar):
 evidencia para hojas de calculo, OCR vs. modelo de vision para imagenes, y el enum de
 `source` nuevo (`spreadsheet`/`image`) en los schemas.
-
-## Proxima fase: auditoria de brechas (tracker + codigo en vivo)
-
-Decidida y planeada (`docs/adr/0016-auditoria-brechas-tracker-codigo-en-vivo.md`,
-`docs/design/plan-auditoria-implementacion.md`), sin codigo todavia. Responde en una
-sola consulta "de lo documentado como `requirement`, que esta implementado, que tiene
-ticket sin implementar, y que ni siquiera tiene ticket -- priorizado", sin preguntarle
-a Metis/tracker/repo por separado. Dos reglas centrales, ya decididas, no abiertas a
-discusion en la implementacion:
-
-- **Nunca se cachea estado como hecho propio.** Lo unico que se puede guardar en
-  Context Base es una cita historica ("se creo un ticket tal fecha") -- el estado
-  actual (existe/no existe, implementado/no) siempre se vuelve a consultar en vivo.
-  Evita exactamente el problema de duplicar fuente de verdad que aparece si alguien
-  borra un ticket del lado del tracker despues de citarlo.
-- **Funciona sin Dedalo ni Talos desplegados.** Vive enteramente del lado de Metis,
-  con sus propios conectores de lectura en vivo (tracker + codigo) y su propia
-  interfaz minima (un script que escribe un reporte Markdown a disco) -- un cliente
-  que solo tiene Metis (sin Dedalo/Talos, que son herramientas internas de
-  Xmartlabs) tiene que poder usar esto igual.
-
-Preguntas de diseno todavia abiertas (documentadas en el plan, no bloquean arrancar):
-que tracker soportar primero, el enum de `source` nuevo (`tracker`), y como se
-implementa la lectura de codigo (grep simple vs. algo mas parecido a la busqueda
-semantica que ya tiene el Investigator de Dedalo -- la duplicacion de esa capacidad
-entre Metis y Dedalo esta aceptada, no es un problema a resolver).
 
 ## Proponer un cambio a este roadmap
 

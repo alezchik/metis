@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Metis -- nucleo compartido de Query Agent + Write Agent (seccion 5.2). Las cuatro
-entradas del contrato (MCP, API REST, Slack, Web -- seccion 8) llaman a las funciones
-de este modulo -- nunca reimplementan la logica cada una por su lado: "no hay cuatro
-implementaciones, hay una logica y cuatro transportes" (seccion 5.2). Hasta Fase 3
+Metis -- nucleo compartido de Query Agent + Write Agent (seccion 5.2). Las dos
+entradas del contrato (MCP, API REST -- seccion 8; Slack app y web app quedaron
+fuera de alcance del producto, docs/adr/0017) llaman a las funciones de este
+modulo -- nunca reimplementan la logica cada una por su lado: "no hay cuatro
+implementaciones, hay una logica y dos transportes" (seccion 5.2). Hasta Fase 3
 esta logica vivia inline dentro de context_assistant/mcp_server.py, con un unico
 transporte (MCP). Fase 4 la extrae aca para que context_assistant/api_server.py
 (seccion 8.2, REST) la reuse tal cual, sin duplicar el guard de escritura ni el
@@ -27,6 +28,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from lib.index import build_index, get_by_id, list_disputed, search  # noqa: E402
+from lib.audit import audit_gaps as _audit_gaps  # noqa: E402
 from lib.write_agent import (  # noqa: E402
     WriteAgentError,
     propose_decision as _propose_decision,
@@ -111,6 +113,18 @@ class Deployment:
                 "message": f"no existe ningun requisito con id={id!r} en Context Base -- no esta documentado.",
             }
         return result
+
+    def audit_gaps(self, requirement_id: str | None = None) -> dict:
+        """Auditoria de brechas (Fase 6, docs/adr/0016): de lo documentado como
+        `requirement` `confirmed`, que esta implementado, que tiene ticket sin
+        implementar, y que ni siquiera tiene ticket -- leyendo tracker y codigo EN
+        VIVO en el momento de esta llamada, nunca desde un campo cacheado (mismo
+        principio de 'derivado, reconstruible' que el indice). Solo lectura -- no
+        requiere writes_enabled, nada de su resultado se escribe de vuelta a Context
+        Base. Si no hay 'tracker' configurado en .contextbase/config.yaml, devuelve
+        {"error": "tracker_not_configured", ...} en vez de fallar -- el resto de
+        Metis sigue funcionando igual, esta es la unica operacion afectada."""
+        return _audit_gaps(self.knowledge_dir, requirement_id=requirement_id)
 
     def list_open_questions(self) -> list[dict]:
         """Entradas en estado 'disputed' (seccion 4.3, docs/adr/0003). Lista vacia si

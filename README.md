@@ -54,6 +54,11 @@ alcance del producto, no solo diferidas (`docs/adr/0017`). **Fase 5, lado de Met
 de frontera con Dedalo/Talos (`docs/design/frontera-ecosistema-talos.md`) ya lo
 satisfacen integramente las operaciones de Fase 1/2 (`docs/adr/0011`); lo que falta
 de esa integracion vive del lado de los repos `talosprd`/`talos`, no de este.
+**Fase 6 -- Auditoria de brechas:** `audit_gaps(requirement_id?)` cruza los
+`requirement` `confirmed` contra un tracker y el codigo del cliente EN VIVO en cada
+consulta (nunca cachea el resultado, `docs/adr/0016`/`docs/adr/0019`) -- funciona
+sin Dedalo ni Talos desplegados, via MCP/API o el script standalone
+`scripts/audit-gaps.sh`.
 
 ## Estructura del repo
 
@@ -64,11 +69,14 @@ scripts/
   validate-entries.sh      corre el validador contra un knowledge/ (para CI del cliente)
   reindex.sh               reconstruye el indice lexical contra un knowledge/
   mcp-serve.sh             levanta el MCP server (Fase 1, solo lectura) por stdio
+  audit-gaps.sh            Fase 6: corre audit_gaps y escribe un reporte Markdown a disco
 lib/
   validate_frontmatter.py  nucleo deterministico: YAML frontmatter + JSON Schema
   index.py                 indice lexical derivado + retrieval + get-by-id (Fase 1)
+  config.py                 resolucion compartida de .contextbase/config.yaml
   state_machine.py          lee entry-state-machine.json, valida transiciones
   write_agent.py            Write Agent: redacta, valida y propone (Fase 2)
+  audit.py                  Fase 6: audit_gaps -- tracker+codigo en vivo, nunca cachea
 context_assistant/
   mcp_server.py            servidor MCP: las 6 operaciones de la seccion 8.1
                            (4 de lectura + propose_decision/propose_update)
@@ -80,6 +88,13 @@ adapters/
   ingestion/
     CONTRACT.md            contrato de conectores de ingesta (fetch_raw -> RawCapture)
     meeting_file.py         conector "meeting_file": transcripcion en disco (Fase 3)
+  tracker/
+    CONTRACT.md            contrato de conectores de tracker (find_related/get_status)
+    file_tracker.py         conector de referencia: tickets en un JSON local (Fase 6)
+    github_issues.py        conector real via `gh issue` (no ejercitado por los tests)
+  code/
+    CONTRACT.md            contrato de conectores de codigo (find_related/get_status)
+    git_log.py               `git log --grep` sobre un checkout local (Fase 6)
 skills/
   metis-ingest-meeting/SKILL.md   rol de destilacion (agentico) para reuniones
 context_assistant/
@@ -94,11 +109,12 @@ fixtures/
 tests/
   test-validate-entries.sh      Fase 0: un archivo bien formado pasa, uno mal formado falla
   test-context-assistant.sh     Fase 1: retrieval/get/list_open_questions contra el fixture
-  test-mcp-protocol.sh          Fase 1: las 4 operaciones de lectura via MCP real (stdio)
+  test-mcp-protocol.sh          Fase 1+6: operaciones de lectura + audit_gaps via MCP real (stdio)
   test-write-agent.sh           Fase 2: propose_decision/propose_update + merge simulado
   test-mcp-write-protocol.sh    Fase 2: propose_decision via MCP real + el guard de escritura
   test-ingestion.sh             Fase 3+4: pipeline completo, dedup, umbral, seguridad, contradiccion
-  test-api-server.sh            Fase 4: las 6 operaciones via HTTP real + auth por API key
+  test-api-server.sh            Fase 4+6: las 7 operaciones via HTTP real + auth por API key
+  test-audit.sh                 Fase 6: conectores tracker/codigo + audit_gaps de punta a punta
 docs/
   design/            los tres documentos de diseno (fuente de verdad)
   adr/               decisiones de arquitectura tomadas durante la construccion
@@ -154,13 +170,14 @@ Registrarlo en un cliente MCP (ej. Claude Code):
 claude mcp add metis -- python3 /ruta/a/metis/context_assistant/mcp_server.py --knowledge-dir /ruta/a/knowledge
 ```
 
-Expone `search_knowledge(query, type?)`, `get_decision(id)`, `get_requirement(id)` y
-`list_open_questions()` -- las cuatro operaciones de lectura de la especificacion
-(seccion 8.1). `list_open_questions()` devuelve las entradas en estado `disputed`
-(ver `docs/adr/0003-preguntas-abiertas-son-disputed.md`). La logica de las seis
-operaciones (estas cuatro + las dos de escritura de la seccion siguiente) vive en
-`context_assistant/core.py` -- este archivo es solo el transporte MCP, lo mismo que
-sirve `context_assistant/api_server.py` (seccion 8.2, Fase 4) por HTTP.
+Expone `search_knowledge(query, type?)`, `get_decision(id)`, `get_requirement(id)`,
+`list_open_questions()` y `audit_gaps(requirement_id?)` -- las cinco operaciones de
+lectura (las primeras cuatro de la especificacion original, seccion 8.1; `audit_gaps`
+se sumo en Fase 6, ver mas abajo). `list_open_questions()` devuelve las entradas en
+estado `disputed` (ver `docs/adr/0003-preguntas-abiertas-son-disputed.md`). La logica
+de las siete operaciones (estas cinco + las dos de escritura de la seccion siguiente)
+vive en `context_assistant/core.py` -- este archivo es solo el transporte MCP, lo
+mismo que sirve `context_assistant/api_server.py` (seccion 8.2, Fase 4) por HTTP.
 
 ## Write Agent (Fase 2 -- seccion 5.2/8.1/2)
 
@@ -205,6 +222,7 @@ GET  /search?q=<query>&type=<type?>    -> search_knowledge
 GET  /decisions/<id>                   -> get_decision
 GET  /requirements/<id>                -> get_requirement
 GET  /open-questions                   -> list_open_questions
+GET  /audit-gaps?requirement_id=<id?>  -> audit_gaps (Fase 6, ver mas abajo)
 POST /decisions            {payload}   -> propose_decision
 POST /entries/<id>/updates {payload}   -> propose_update
 ```
@@ -259,16 +277,43 @@ lo resuelve un humano revisando el PR. Ver `fixtures/ingestion/2026-09-22-follow
 para el caso de ejemplo (una reunion de seguimiento que contradice la decision del
 kickoff).
 
+## Auditoria de brechas (Fase 6 -- tracker+codigo en vivo, `docs/adr/0016`)
+
+```bash
+scripts/audit-gaps.sh --knowledge-dir /ruta/a/knowledge [--requirement-id REQ-0007] [--out reporte.md]
+```
+
+Responde, en una sola consulta, "de lo documentado como `requirement` `confirmed`,
+que esta implementado, que tiene ticket sin implementar, y que ni siquiera tiene
+ticket -- priorizado". Lee un tracker (`adapters/tracker/`) y el codigo del cliente
+(`adapters/code/`) **en vivo, en cada llamada** -- ningun resultado se cachea como
+hecho propio en Context Base (la unica escritura permitida relacionada con esto es
+una cita historica de tracker via `evidence`, agregada conversacionalmente con
+`propose_update`, nunca automatica). Requiere `tracker:` en
+`.contextbase/config.yaml` (`provider: file` con `tickets_file`, o `provider: github`
+con `repo`, usando `gh` ya autenticado) -- sin eso, `audit_gaps()` devuelve
+`{"error": "tracker_not_configured"}` explicito, sin afectar el resto de Metis. Sin
+`code: {repo_path}` configurado, igual corre, pero cada resultado queda marcado
+`approximation: true` ("ticket cerrado" solo no alcanza como "implementado" sin
+verificar contra un commit mergeado -- `docs/design/plan-auditoria-implementacion.md`
+seccion 1.1).
+
+Tambien expuesto por MCP (`audit_gaps(requirement_id?)`) y por API REST
+(`GET /audit-gaps?requirement_id=<id?>`) -- misma logica de `context_assistant/core.py`
+por debajo, sin reimplementar nada (seccion 5.2). Decisiones de implementacion (que
+tracker primero, el enum `source` nuevo, como leer codigo) en `docs/adr/0019`.
+
 ## Correr los tests de este repo
 
 ```bash
 tests/test-validate-entries.sh       # Fase 0
 tests/test-context-assistant.sh      # Fase 1 -- nucleo de indice/retrieval
-tests/test-mcp-protocol.sh           # Fase 1 -- via el protocolo MCP real (stdio)
+tests/test-mcp-protocol.sh           # Fase 1+6 -- lectura + audit_gaps via el protocolo MCP real (stdio)
 tests/test-write-agent.sh            # Fase 2 -- propose_decision/propose_update + merge simulado
 tests/test-mcp-write-protocol.sh     # Fase 2 -- propose_decision via MCP real + el guard
 tests/test-ingestion.sh              # Fase 3+4 -- pipeline completo, dedup, umbral, seguridad, contradiccion
-tests/test-api-server.sh             # Fase 4 -- las 6 operaciones via HTTP real + auth por API key
+tests/test-api-server.sh             # Fase 4+6 -- las 7 operaciones via HTTP real + auth por API key
+tests/test-audit.sh                  # Fase 6 -- conectores tracker/codigo + audit_gaps de punta a punta
 ```
 
 ## Principios (resumen; el detalle completo esta en la especificacion)

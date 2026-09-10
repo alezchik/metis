@@ -2,11 +2,15 @@
 """
 Metis -- Context Assistant, transporte MCP (seccion 8.1).
 
-Expone las seis operaciones del contrato MCP:
+Expone las siete operaciones del contrato MCP:
   search_knowledge(query, type?)  -- retrieval con cita, nunca inventa
   get_decision(id)                -- una decision puntual, con status y superseding
   get_requirement(id)             -- un requisito puntual
   list_open_questions()           -- entradas status=disputed (ver docs/adr/0003)
+  audit_gaps(requirement_id?)     -- Fase 6: que requirement confirmed esta
+                                     implementado / tiene ticket sin implementar /
+                                     no tiene ticket, leyendo tracker+codigo en vivo
+                                     (docs/adr/0016). Solo lectura.
   propose_decision(payload)       -- Write Agent: abre una propuesta (PR o su
                                      degradacion, ver adapters/CONTRACT.md) con una
                                      decision nueva. Nunca mergea.
@@ -54,8 +58,8 @@ mcp = MCPServer(
         "reuniones destiladas y terminos de glosario. Toda respuesta cita archivo + "
         "commit (built_from); si no hay evidencia, la operacion devuelve vacio o "
         "{error: not_found} -- nunca completa con contenido inventado. "
-        "search_knowledge/get_decision/get_requirement/list_open_questions son de solo "
-        "lectura. propose_decision/propose_update abren una propuesta (PR o su "
+        "search_knowledge/get_decision/get_requirement/list_open_questions/audit_gaps son "
+        "de solo lectura. propose_decision/propose_update abren una propuesta (PR o su "
         "degradacion) contra Context Base -- nunca mergean, nunca escriben directo a "
         "la rama base; el humano que revisa el PR es quien confirma de verdad."
     ),
@@ -103,6 +107,26 @@ def list_open_questions() -> list[dict]:
     ninguna disputa abierta -- eso es un resultado valido, no un error.
     """
     return DEPLOYMENT.list_open_questions()
+
+
+@mcp.tool()
+def audit_gaps(requirement_id: str | None = None) -> dict:
+    """Auditoria de brechas (Fase 6, docs/adr/0016): de lo documentado como
+    `requirement` confirmed, que esta implementado, que tiene ticket sin implementar,
+    y que ni siquiera tiene ticket -- leyendo tracker y codigo EN VIVO en el momento
+    de la consulta, nunca desde un campo cacheado. Si no hay 'tracker' configurado en
+    .contextbase/config.yaml, devuelve {"error": "tracker_not_configured", ...} --
+    funciona sin Dedalo ni Talos desplegados, pero necesita sus propios conectores de
+    lectura configurados (tracker + opcionalmente codigo).
+
+    Args:
+        requirement_id: opcional -- audita un unico requirement (ej. REQ-0007) en vez
+            de todos los `confirmed`.
+
+    El resultado nunca se escribe de vuelta a Context Base -- se recalcula en cada
+    llamada (mismo principio que el indice: derivado, reconstruible).
+    """
+    return DEPLOYMENT.audit_gaps(requirement_id)
 
 
 @mcp.tool()

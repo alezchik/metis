@@ -431,12 +431,18 @@ como herramienta — mismo espíritu que `providers/CONTRACT.md` de Talos.
 | `propose_decision(payload)` | Abre un PR con una decisión nueva | Sí (propuesta) |
 | `propose_update(id, payload)` | Abre un PR marcando una entrada existente como superseded | Sí (propuesta) |
 
-Seis operaciones, ningún verbo que borre ni que mergee — igual que el contrato de providers de Talos
+**Nota (`docs/adr/0016`, Fase 6).** Se sumó una séptima operación, de solo lectura:
+
+| Operación | Qué hace | Escribe |
+|---|---|---|
+| `audit_gaps(requirement_id?)` | De lo documentado como `requirement` confirmed, qué está implementado / tiene ticket sin implementar / no tiene ticket -- leyendo tracker y código EN VIVO en cada consulta, nunca desde un campo cacheado | No |
+
+Siete operaciones, ningún verbo que borre ni que mergee — igual que el contrato de providers de Talos
 (`check, poll, fetch, comment, recheck, label`) se mantiene deliberadamente angosto.
 
 ### 8.2 API REST
 
-Espejo delgado de las mismas seis operaciones, para automatizaciones del cliente que no hablan MCP.
+Espejo delgado de las mismas siete operaciones, para automatizaciones del cliente que no hablan MCP.
 Autenticación por API key emitida por proyecto (nunca compartida entre clientes, consistente con §5.1).
 
 **Nota (`docs/adr/0017`).** El borrador original también nombraba un Slack app y una web app como
@@ -585,8 +591,8 @@ necesitar escalar a humano.
 | Ubicación y control de acceso real del store de capturas crudas | `ingestion.capture_store_dir` obligatorio (fuera del repo, verificado por `lib/ingestion.py::resolve_capture_store_dir`), directorio `0700`/archivos `0600`, wireado de punta a punta por `scripts/ingest-capture.sh` + `scripts/run-ingestion-pipeline.sh` (`docs/adr/0018`) -- cifrado a nivel de campo queda como pregunta abierta, no como hueco silencioso |
 | Falla de extracción silenciosa en conectores de documentos/PDF/Excel/imágenes (contenido no legible, pero informado como si se hubiese extraído todo) | Regla nueva y explícita en `adapters/ingestion/CONTRACT.md` (`docs/adr/0015`): toda falla de extracción, total o parcial, levanta una excepción declarada -- nunca un `RawCapture` vacío o incompleto sin marcar |
 | Video como fuente de ingesta | Explícitamente fuera de alcance (`docs/adr/0015`) -- ningún formato de video se procesa, ni frames ni audio |
-| Cachear el estado de un ticket/PR externo como si fuera un hecho propio (y que quede desactualizado si algo cambia del otro lado) | Prohibido explícitamente (`docs/adr/0016`) -- solo se guarda cita histórica en `evidence`, el estado actual siempre se consulta en vivo al tracker/código |
-| La auditoría de brechas (tracker/código) queda inutilizable para un cliente sin Dédalo/Talos desplegados | `docs/adr/0016` -- la capacidad vive 100% del lado de Metis, con su propia interfaz mínima (script + reporte Markdown), nunca depende de las otras dos piezas del ecosistema |
+| Cachear el estado de un ticket/PR externo como si fuera un hecho propio (y que quede desactualizado si algo cambia del otro lado) | Prohibido explícitamente (`docs/adr/0016`, implementado en `lib/audit.py::audit_gaps`, `docs/adr/0019`) -- solo se guarda cita histórica en `evidence`, el estado actual siempre se consulta en vivo al tracker/código |
+| La auditoría de brechas (tracker/código) queda inutilizable para un cliente sin Dédalo/Talos desplegados | `docs/adr/0016` -- la capacidad vive 100% del lado de Metis, con su propia interfaz mínima (`scripts/audit-gaps.sh` + reporte Markdown), nunca depende de las otras dos piezas del ecosistema |
 | Mezcla de contexto entre clientes | Resuelto por construcción: un deployment aislado por proyecto, nunca multi-tenant (§5.1) |
 | El índice semántico se desincroniza del repo y empieza a responder con información vieja | `built_from` por commit sha en cada entrada indexada + reconstrucción completa posible en cualquier momento (§5.2) |
 | Cliente sin GitHub/GitLab hosteado (on-prem, sin API) | El formato markdown es portable incluso sin conector de PR automático — degrada a "generar el diff, un humano lo aplica a mano" en el peor caso, nunca bloquea la existencia de Context Base |

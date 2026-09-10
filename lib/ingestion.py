@@ -55,6 +55,7 @@ import yaml  # noqa: E402
 from jsonschema import Draft7Validator  # noqa: E402
 
 from lib.index import build_index  # noqa: E402
+from lib.config import find_config_path as _find_config_path  # noqa: E402
 from lib.write_agent import WriteAgentError, propose_new_entry, propose_update as _propose_update  # noqa: E402
 
 CANDIDATE_ENTRY_TYPES = ("decision", "requirement", "risk")
@@ -306,14 +307,6 @@ def _candidate_to_contradiction_payload(candidate: dict[str, Any], requested_by:
         "requested_by": requested_by,
         "context_ref": context_ref,
     }
-
-
-def _find_config_path(base: Path) -> Path | None:
-    for candidate in [base] + list(base.parents):
-        maybe = candidate / ".contextbase" / "config.yaml"
-        if maybe.is_file():
-            return maybe
-    return None
 
 
 def _load_noise_threshold(knowledge_dir: Path) -> float:

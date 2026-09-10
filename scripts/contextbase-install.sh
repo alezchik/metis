@@ -99,7 +99,8 @@ cat > "$TARGET/.contextbase/config.yaml.example" <<YAMLEOF
 mode: $MODE            # standalone | embedded (seccion 4.1)
 project:
   name: ""               # nombre corto del proyecto/cliente
-  tracker: ""              # jira | linear | file | none
+  tracker: ""              # informativo, en texto libre (jira/linear/etc) -- ver el bloque
+                            # "tracker:" mas abajo para el conector de lectura en vivo real (Fase 6)
 ingestion:
   sources: []                # ej: [meetings] -- vacio hasta Fase 3
   confidence_threshold: 0.6     # umbral de confianza/relevancia para proponer (seccion 6)
@@ -109,6 +110,19 @@ ingestion:
                                  # servidor, o ~/.local/share/contextbase/captures/<proyecto> en
                                  # uso local. lib/ingestion.py::resolve_capture_store_dir frena
                                  # explicito si esto falta o si apunta adentro de este repo.
+tracker:                       # OPCIONAL -- sin esto, audit_gaps() degrada explicito con
+                                # {"error": "tracker_not_configured"} (docs/adr/0016), el
+                                # resto de Metis sigue andando igual.
+  provider: ""                  # file | github
+  tickets_file: ""               # path a un JSON [{ref,title,state,url}, ...] -- si provider=file
+  repo: ""                       # "owner/repo" -- si provider=github (usa gh, sin comillas, ya autenticado)
+code:                          # OPCIONAL -- sin esto, audit_gaps() igual corre, pero cada
+                                # resultado queda marcado approximation=true (ticket cerrado
+                                # sin verificar contra un commit mergeado, ver
+                                # docs/design/plan-auditoria-implementacion.md seccion 1.1).
+  repo_path: ""                  # path a un checkout LOCAL del repo de codigo del cliente
+                                 # (puede ser distinto del repo Context Base)
+  branch: ""                     # opcional -- default: la rama actual del checkout
 YAMLEOF
 
 cat > "$TARGET/.gitignore" <<'GITEOF'

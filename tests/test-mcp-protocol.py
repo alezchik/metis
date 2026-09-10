@@ -57,8 +57,8 @@ async def main() -> int:
             tools = await session.list_tools()
             names = {t.name for t in tools.tools}
             check(
-                "el servidor expone las 4 operaciones de la seccion 8.1",
-                {"search_knowledge", "get_decision", "get_requirement", "list_open_questions"} <= names,
+                "el servidor expone las 4 operaciones de lectura de la seccion 8.1 + audit_gaps (Fase 6)",
+                {"search_knowledge", "get_decision", "get_requirement", "list_open_questions", "audit_gaps"} <= names,
             )
 
             search_result = await session.call_tool("search_knowledge", {"query": "SSO Okta"})
@@ -87,6 +87,13 @@ async def main() -> int:
             open_questions_result = await session.call_tool("list_open_questions", {})
             open_questions = _result_value(open_questions_result)
             check("list_open_questions via MCP encuentra DEC-0004 (disputed)", any(q["id"] == "DEC-0004" for q in open_questions))
+
+            audit_result = await session.call_tool("audit_gaps", {})
+            audit = _result_value(audit_result)
+            check(
+                "audit_gaps via MCP degrada explicito sin tracker configurado (el fixture no tiene .contextbase/config.yaml con tracker:, docs/adr/0016)",
+                audit.get("error") == "tracker_not_configured",
+            )
 
     print()
     if failures:

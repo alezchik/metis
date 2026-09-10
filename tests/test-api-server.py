@@ -7,11 +7,11 @@ tests/test-mcp-write-protocol.py prueba el transporte MCP contra el mismo
 lib/write_agent.py por debajo.
 
 Verifica: autenticacion por API key (sin key -> el proceso no arranca; key incorrecta
--> 401), las cuatro operaciones de lectura, las dos de escritura (mismo Write Agent
-que el transporte MCP, mismo guard de writes_disabled), y que un error de dominio
-(ej. "not_found") viaja en el body con status 200 -- nunca un status HTTP distinto
-segun el tipo de error de negocio, porque la logica es la misma sea cual sea el
-transporte (seccion 5.2).
+-> 401), las cuatro operaciones de lectura, audit_gaps (Fase 6, docs/adr/0016), las
+dos de escritura (mismo Write Agent que el transporte MCP, mismo guard de
+writes_disabled), y que un error de dominio (ej. "not_found") viaja en el body con
+status 200 -- nunca un status HTTP distinto segun el tipo de error de negocio,
+porque la logica es la misma sea cual sea el transporte (seccion 5.2).
 """
 from __future__ import annotations
 
@@ -131,6 +131,12 @@ def main() -> int:
 
         status, resp = _request(base_url, "GET", "/ruta-que-no-existe", api_key=api_key)
         check("una ruta HTTP no definida es 404 real (esto si es error de transporte, no de dominio)", status == 404)
+
+        status, resp = _request(base_url, "GET", "/audit-gaps", api_key=api_key)
+        check(
+            "GET /audit-gaps sin tracker configurado degrada explicito con 200 + {error: tracker_not_configured} (Fase 6, docs/adr/0016) -- mismo contrato que cualquier otro error de dominio",
+            status == 200 and resp.get("error") == "tracker_not_configured",
+        )
 
         # --- escritura ---
         status, resp = _request(

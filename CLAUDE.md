@@ -35,6 +35,13 @@ construccion de Fase 0-5.
   cual version vale -- solo marca la entrada para que un humano decida al revisar
   el PR. Si una funcion nueva alguna vez "decide" automaticamente cual de dos
   versiones es la correcta, esta violando este principio.
+- **Ningun estado de un sistema externo se cachea como hecho propio.**
+  `lib/audit.py::audit_gaps` (Fase 6, `docs/adr/0016`) es la aplicacion de este
+  principio a tracker/codigo: lo unico que se puede guardar en Context Base es una
+  cita historica ("se creo el ticket X tal fecha", via `evidence`) -- el estado
+  actual (existe? cerrado? mergeado?) siempre se vuelve a consultar en vivo en cada
+  llamada, nunca se lee de esa cita. Mismo espiritu que "nada propio puede ser
+  fuente de verdad", aplicado a lo que otro sistema (no Context Base) afirma.
 
 ## Gotchas operativos
 
@@ -67,6 +74,14 @@ construccion de Fase 0-5.
 - **El transporte REST usa `http.server` de la stdlib a proposito** (cero
   dependencias nuevas). No cambiar a un framework (Flask/FastAPI/etc.) sin un ADR
   que lo justifique.
+- **El indice lexical de `lib/index.py` (TF-IDF) no sirve para matchear un id
+  exacto contra contenido libre.** Un id como `REQ-0004` tokeniza a
+  `["req", "0004"]` -- el token `"req"` por si solo matchea cualquier entrada que
+  mencione *cualquier* requirement, no solo ese. `lib/audit.py::_related_risk_severity`
+  pego con esto (ver `docs/adr/0019`) y lo resolvio con busqueda de substring
+  literal sobre el archivo completo en vez de `lib/index.py::search`. Si necesitas
+  matchear un identificador especifico contra texto libre en algun lugar nuevo,
+  usar substring, no el indice.
 
 ## Correr los tests
 
