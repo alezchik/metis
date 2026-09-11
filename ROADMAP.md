@@ -10,18 +10,19 @@
   Probado (`tests/test-validate-entries.sh`).
 - **Fase 1 -- Lectura, sin ingesta.** Indice lexical derivado
   (`lib/index.py`, TF-IDF liviano -- `docs/adr/0002` explica por que no
-  embeddings todavia) + servidor MCP de solo lectura
-  (`context_assistant/mcp_server.py`) exponiendo `search_knowledge`,
-  `get_decision`, `get_requirement`, `list_open_questions`. Probado con
-  llamadas directas (`tests/test-context-assistant.sh`) y contra el protocolo MCP
-  real por stdio (`tests/test-mcp-protocol.sh`).
+  embeddings todavia) exponiendo `search_knowledge`, `get_decision`,
+  `get_requirement`, `list_open_questions`. Originalmente servido tambien por un
+  transporte MCP de solo lectura (`context_assistant/mcp_server.py`); ese
+  transporte se elimino con el pivot a "Metis sin servidor" (`docs/adr/0025`) --
+  las mismas operaciones se invocan hoy directo via `lib/index.py`, sin proceso
+  intermedio. Probado con llamadas directas (`tests/test-context-assistant.sh`).
 - **Fase 2 -- Escritura conversacional.** Write Agent
   (`lib/write_agent.py`: `propose_decision`/`propose_update`) + GitProvider con
   degradacion con gracia segun credenciales disponibles (`adapters/CONTRACT.md`,
-  `docs/adr/0006`). Expuesto por el mismo MCP server, sin infraestructura nueva
-  (`docs/adr/0005`). Probado con un merge local real simulado
-  (`tests/test-write-agent.sh`) y contra el protocolo MCP real
-  (`tests/test-mcp-write-protocol.sh`).
+  `docs/adr/0006`). Expuesto originalmente por el mismo MCP server, sin
+  infraestructura nueva (`docs/adr/0005`); hoy via `lib/propose_cli.py`/
+  `scripts/propose.sh`, sin transporte (`docs/adr/0025`). Probado con un merge
+  local real simulado (`tests/test-write-agent.sh`).
 - **Fase 3 -- Primer conector de ingesta (reuniones).** Pipeline completo de la
   seccion 6: captura cruda fuera de git (`lib/ingestion.py::save_capture`),
   destilacion como rol agentico (`skills/metis-ingest-meeting/SKILL.md`), dedup/match
@@ -32,17 +33,18 @@
   dedup/match documentado en `docs/adr/0008`. Probado de punta a punta contra una
   reunion real (fixture) con su destilacion ya hecha a mano
   (`tests/test-ingestion.sh`).
-- **Fase 4 -- API REST + contradiccion activada + no-goals explicitos.** La
-  logica de las 6 operaciones se extrajo a `context_assistant/core.py`, compartida
-  por el transporte MCP y un transporte API REST nuevo
-  (`context_assistant/api_server.py`, auth obligatoria por API key -- seccion 8.2).
-  El flujo de superseding/`disputed` se activo desde ingesta real (`docs/adr/0009`)
-  -- una segunda reunion que contradice una decision `confirmed` marca esa entrada
+- **Fase 4 -- contradiccion activada + no-goals explicitos.** El flujo de
+  superseding/`disputed` se activo desde ingesta real (`docs/adr/0009`) -- una
+  segunda reunion que contradice una decision `confirmed` marca esa entrada
   `disputed`, citando ambas fuentes (`fixtures/ingestion/2026-09-22-followup.*`).
   Conectores de Confluence/Notion/mail quedan diferidos (`docs/adr/0010`) -- ver
-  "Huecos conocidos" abajo. Slack app y web app quedan fuera de alcance del producto,
-  no solo diferidas (`docs/adr/0017`). Probado
-  (`tests/test-api-server.sh`, ampliacion de `tests/test-ingestion.sh`).
+  "Huecos conocidos" abajo. Slack app y web app quedan fuera de alcance del
+  producto, no solo diferidas (`docs/adr/0017`, superseded por `docs/adr/0025`).
+  Esta fase tambien habia agregado una API REST nueva
+  (`context_assistant/api_server.py`, auth por API key) como segundo transporte
+  junto al MCP -- ambos transportes se eliminaron con el pivot a "Metis sin
+  servidor" (`docs/adr/0025`): ya no hay ningun transporte que mantener, cada
+  operacion es un CLI directo. Probado (ampliacion de `tests/test-ingestion.sh`).
 - **Fase 5, lado de Metis -- completo sin trabajo adicional.** El contrato de
   frontera con Dedalo/Talos (`docs/design/frontera-ecosistema-talos.md`, secciones
   2/3) ya esta satisfecho integramente por las operaciones de Fase 1/2 -- cero
@@ -59,13 +61,12 @@
   (implementado / con ticket sin implementar / sin ticket), discrepancia explicita
   si una cita a un ticket ya no resuelve, aproximacion marcada si falta el conector
   de codigo, y priorizacion sugerida por `depends_on` + severidad de riesgo
-  relacionado + antiguedad (nunca automatica, seccion 5 del plan). Expuesto por
-  MCP/API (`audit_gaps(requirement_id?)`, septima operacion del contrato) y por un
-  script standalone (`scripts/audit-gaps.sh`) que escribe un reporte Markdown a
-  disco -- funciona sin Dedalo ni Talos desplegados. Decisiones de implementacion
+  relacionado + antiguedad (nunca automatica, seccion 5 del plan). Invocable via
+  `lib/audit_gaps_cli.py`/`scripts/audit-gaps.sh` (`audit_gaps(requirement_id?)`,
+  septima operacion del contrato), que escribe un reporte Markdown a disco --
+  funciona sin Dedalo ni Talos desplegados. Decisiones de implementacion
   (que tracker primero, el enum `source` nuevo, como leer codigo) en
-  `docs/adr/0019`. Probado (`tests/test-audit.sh`, ampliacion de
-  `tests/test-mcp-protocol.sh` y `tests/test-api-server.sh`).
+  `docs/adr/0019`. Probado (`tests/test-audit.sh`).
 - **Conector de tracker Linear.** `adapters/tracker/linear_issues.py` -- tercer
   provider de tracker para `audit_gaps` (junto a `file`/`github`), via la API
   GraphQL de Linear (`LINEAR_API_KEY`, nunca guardada en `config.yaml`). Mismo
@@ -88,22 +89,13 @@
 
 ## Huecos conocidos (no bloqueantes)
 
-- **`lib/index.py::semantic_search` y `find_related()` con `provider` reembeben todo el
-  contenido en cada llamada, sin cache.** Mismo principio que el resto del indice ("derivado,
-  reconstruible"), pero el costo/latencia real de esto contra un volumen de Context Base real
-  (no `fixtures/`) no se midio -- si se vuelve un problema, considerar un cache de embeddings
-  por hash de contenido (invalidado automaticamente si el contenido cambia).
-- **`adapters/llm/external.py`/`self_hosted.py` solo implementan el protocolo "estilo OpenAI"
-  (`POST /embeddings`, `POST /chat/completions`).** Cubre OpenAI y la mayoria de motores
-  self-hosted (vLLM, Ollama, LM Studio), pero un proveedor externo que hable un protocolo
-  distinto (ej. la Messages API de Anthropic, que no ofrece embeddings) necesita su propio
-  modulo nuevo bajo `adapters/llm/` (mismo contrato, ver `CONTRIBUTING.md`).
-- **Filtro de contenido sensible/PII antes de mandar codigo/requirements a un proveedor externo
-  de IA -- sin resolver.** `docs/adr/0023` dejo esto explicitamente como pregunta abierta: el
-  mismo filtro que ya existe para la ingesta de reuniones (`docs/adr/0018`) no se aplico todavia
-  al contenido que sale hacia `adapters/llm/external.py`.
-- **Quien paga la inferencia de embeddings/evaluacion en produccion -- sin resolver.** Pregunta
-  de negocio explicitamente abierta (`docs/adr/0023`), sin fecha limite.
+- **No hay skill/CLI todavia que reemplace `evaluate_implementation`.** El motor de
+  IA que lo implementaba (`docs/adr/0021`-`0024`) se revirtio con el pivot a
+  "Metis sin servidor" (`docs/adr/0025`) -- ver la seccion "Revertido" mas abajo.
+  El caso que resolvia (confirmar que un requirement sin ticket ya esta
+  implementado, sin depender de un match lexical/de ticket) sigue sin cubrir; la
+  idea es resolverlo como una skill que la propia sesion de Claude ejecuta
+  leyendo codigo directo, en vez de un adapter con su propio proveedor de IA.
 - **Umbral de confianza/relevancia sin validar contra uso real.**
   `ingestion.confidence_threshold` arranca en `0.6` (default conservador,
   `scripts/contextbase-install.sh`), pero ningun valor se probo todavia contra
@@ -126,10 +118,10 @@
   mitigado en el peor caso (degrada a generar el diff para que un humano lo
   aplique a mano), pero no hay un adapter real para un segundo proveedor.
 - **El indice se reconstruye entero en cada llamada, sin cache.** Intencional
-  para el volumen actual (`context_assistant/core.py`) -- no medido contra un
-  Context Base grande de verdad; si se agrega cache, tiene que invalidar de forma
-  que nunca sirva algo mas viejo que el HEAD real (romperia "derivado,
-  reconstruible").
+  para el volumen actual (`lib/index.py::build_index`, invocado fresco por cada
+  CLI/skill) -- no medido contra un Context Base grande de verdad; si se agrega
+  cache, tiene que invalidar de forma que nunca sirva algo mas viejo que el HEAD
+  real (romperia "derivado, reconstruible").
 - **Conectores de Confluence/Notion/mail** -- diferidos explicitamente
   (`docs/adr/0010`): sin credenciales de una API real ni un piloto concreto contra
   el cual construirlos y probarlos (salvo Notion, ver abajo).
@@ -139,12 +131,14 @@
   `docs/adr/0012` (una integracion de Notion es una credencial compartida a nivel
   workspace, y Metis no distingue accesos por usuario en su propio lado de
   lectura) no se considera aceptable sin un piloto concreto que lo justifique.
-- **Metis no distingue accesos por usuario en su propio lado de lectura
-  (MCP/API).** Todo lo que entra a Context Base queda visible a cualquiera con
-  acceso a ese deployment, sin niveles internos -- limitacion de fondo detras de
+- **Metis no distingue accesos por usuario dentro de un mismo Context Base.**
+  Con el pivot a "Metis sin servidor" (`docs/adr/0025`) el control de acceso es
+  el que ya da git (permisos del repo de Context Base) -- pero eso sigue siendo
+  todo-o-nada: cualquiera con acceso de lectura al repo ve el contenido entero,
+  sin niveles internos por seccion/tipo de entrada. Limitacion de fondo detras de
   `docs/adr/0012`, no algo que un conector de ingesta pueda resolver por su
-  cuenta. Resolverlo de verdad implica autorizacion por usuario en el MCP/API
-  server, todavia sin diseñar.
+  cuenta.
+
 ## Resuelto: filtro de contenido sensible/PII + store de capturas real (`docs/adr/0018`)
 
 `docs/adr/0014` habia identificado que la destilacion de reuniones no tenia
@@ -170,57 +164,36 @@ desplegados. Las tres preguntas de diseno que quedaban abiertas se resolvieron a
 implementar -- ver `docs/adr/0019` y la seccion 8 (actualizada) de
 `docs/design/plan-auditoria-implementacion.md`.
 
-## Motor de IA: busqueda semantica + evaluacion de codigo via LLM (`docs/adr/0021`-`0024`)
+## Revertido: motor de IA (busqueda semantica + evaluacion de codigo via LLM, `docs/adr/0021`-`0024`, superseded por `docs/adr/0025`)
 
-Surgio de revisar en detalle por que `audit_gaps()` puede fallar contra un proyecto real: el
-matching de `find_related()` (tracker) y de `search_knowledge()` era literal/lexical
-(`docs/adr/0002`) -- no reconocia un pedido en español contra un ticket en ingles, ni dos frases
-parafraseadas distinto. Y sin ticket previo, `audit_gaps()` no tenia forma de confirmar que algo
-ya estaba implementado, porque el conector de codigo (`adapters/code/git_log.py`) solo busca un
-id literal en commits. Implementado de punta a punta, prerequisito del piloto real (no posterior
-a el, decision que revierte la secuencia sugerida al principio) -- la herramienta tiene que
-funcionar contra un proyecto que ya esta corriendo, no solo uno que arranca de cero.
+Esto se implemento de punta a punta -- motor de busqueda semantica por embeddings
+reemplazando TF-IDF en `search_knowledge()`/`find_related()`, `evaluate_implementation()`
+como octava operacion del contrato via un adapter LLM (`external`/`self_hosted`, protocolo
+"estilo OpenAI") -- pero se revirtio completo en el mismo pivot que elimino el servidor
+(`docs/adr/0025`), antes de llegar a un piloto real. La razon no fue tecnica: al dejar de
+haber un deployment por cliente que corra este codigo con su propia API key/endpoint, ya no
+hay quien "sea" el servidor que hace la llamada de red saliente a un proveedor de IA -- ese rol
+lo pasa a cumplir la sesion de Claude que ya esta operando Metis, que razona directo sobre el
+contenido en vez de llamar a un LLM aparte por HTTP.
 
-- **Motor de busqueda semantica (embeddings)** -- `lib/index.py::semantic_search` (reemplaza
-  TF-IDF en `search_knowledge()` cuando hay `llm:` configurado) y el parametro opcional
-  `provider` de `find_related()` en los tres conectores de tracker (`docs/adr/0021`, supersede
-  a `docs/adr/0002`). Sin `llm:` configurado, ambos siguen funcionando exactamente igual que
-  antes (lexical/difflib) -- degradacion explicita, nunca silenciosa (`docs/adr/0024`).
-- **`evaluate_implementation(requirement_id)`** -- octava operacion del contrato
-  (`lib/evaluate.py`), evaluacion de codigo via LLM bajo demanda para el caso sin ticket previo
-  (`docs/adr/0022`): arma contexto de codigo acotado por palabras clave del propio requirement
-  (`adapters/code/git_log.py::search_content`, `git grep` sobre el checkout, nunca el repo
-  entero) y le pide un veredicto a un LLM -- siempre con evidencia puntual citada (archivo/
-  linea/commit), nunca "si/no" sin respaldo; sin esa evidencia, el propio adapter convierte el
-  veredicto en `inconclusive` antes de devolverlo. Convive con `audit_gaps()`, no lo reemplaza.
-- **`adapters/llm/` (`docs/adr/0023`/`0024`)** -- interfaz comun (`embed`/`evaluate`) para dos
-  modos: `external` (proveedor de terceros, API key del cliente via `METIS_LLM_API_KEY`, nunca
-  en `config.yaml`) y `self_hosted` (modelo del cliente, `endpoint` obligatorio). Los dos hablan
-  el mismo protocolo "estilo OpenAI" (`POST /embeddings`, `POST /chat/completions`,
-  `adapters/llm/openai_protocol.py`) -- cero dependencias nuevas (stdlib `urllib`, mismo criterio
-  que `adapters/tracker/linear_issues.py`). Fail-fast sin default silencioso: sin `llm:`
-  configurado, la busqueda degrada a lexical; `evaluate_implementation` rechaza con un error
-  explicito (no tiene fallback razonable).
-
-Probado (`tests/test-llm-engine.sh`, `tests/test-semantic-search.sh`,
-`tests/test-evaluate-implementation.sh`) contra un transporte HTTP simulado -- nunca pega contra
-una API de IA real, mismo patron que `tests/test-linear-tracker.sh`.
-
-Preguntas de negocio que quedaron explicitamente abiertas (no bloquean lo ya implementado): quien
-paga la inferencia en produccion, y si el contenido que sale hacia un proveedor externo deberia
-pasar por el mismo filtro de contenido sensible/PII que ya existe para reuniones
-(`docs/adr/0018`) -- ver "Huecos conocidos" mas abajo.
+Se elimino en su totalidad: `adapters/llm/` completo, `lib/evaluate.py`, `lib/llm_config.py`,
+el modo `semantic_search` de `lib/index.py` y el parametro `provider` de `find_related()`,
+`adapters/code/git_log.py::search_content`, y los tests que los cubrian
+(`test-llm-engine.*`, `test-semantic-search.*`, `test-evaluate-implementation.*`). El caso que
+resolvia `evaluate_implementation` (confirmar que un requirement sin ticket ya esta
+implementado) sigue sin cubrir -- ver "Huecos conocidos" arriba, donde queda anotado como
+skill pendiente en vez de adapter.
 
 ## Proximo hito: un piloto real
 
 Todo lo de arriba se valido contra `fixtures/` -- un Context Base de mentira, una
-transcripcion de mentira. El proximo paso real es levantar un Context Base contra
-un proyecto real: un repo Git real del cliente, una API key real emitida para ese
-proyecto, un `ingestion.capture_store_dir` configurado para ese deployment, y
-correr el pipeline de ingesta contra una reunion real, y configurar `tracker`/`code`/`llm`
-en `.contextbase/config.yaml` para probar `audit_gaps`/`evaluate_implementation` contra el
-tracker, el repo de codigo y el motor de IA reales de ese proyecto. Nada de este repo bloquea
-que eso arranque.
+transcripcion de mentira. El proximo paso real es levantar un Context Base real
+para un proyecto real: un repo git nuevo (el tercero de los tres, junto a Metis y
+al repo de codigo del cliente), permisos git configurados para el equipo,
+un `ingestion.capture_store_dir` real, y correr el pipeline de ingesta contra
+una reunion real, y configurar `tracker`/`code` en `.contextbase/config.yaml` para
+probar `audit_gaps` contra el tracker y el repo de codigo reales de ese proyecto.
+Nada de este repo bloquea que eso arranque.
 
 Un segundo hito, independiente y sin fecha, es la integracion de punta a punta con
 Dedalo/Talos -- el contrato ya esta documentado (`docs/design/frontera-ecosistema-talos.md`,

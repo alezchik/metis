@@ -97,18 +97,3 @@ excepcion que un llamador pueda confundir con "el tracker no esta disponible".
 Configuracion (`.contextbase/config.yaml`, seccion `tracker:`) en
 `scripts/contextbase-install.sh` (`config.yaml.example`) y
 `docs/design/plan-auditoria-implementacion.md`.
-
-## Busqueda semantica (docs/adr/0021, implementada)
-
-Los tres conectores de arriba ganaron un parametro OPCIONAL nuevo en `find_related()`:
-`provider` -- una instancia de motor de IA (`adapters/llm/CONTRACT.md`). Sin `provider` (o si
-`llm:` no esta configurado, ver `lib/llm_config.py`), `find_related()` sigue comportandose
-exactamente igual que antes (similitud lexical -- `difflib` en `file_tracker.py`/
-`github_issues.py`, o el equivalente delegado en la API de Linear). Con `provider`, compara
-embeddings (similitud de coseno, `adapters/llm/similarity.py`) en vez de tokens -- resuelve el
-caso que la similitud lexical nunca pudo: un pedido en un idioma distinto al del tracker, o
-parafraseado distinto al titulo del ticket. El contrato de `find_related`/`get_status` de este
-archivo no cambia (docs/adr/0021) -- `provider` es aditivo, quien no lo pasa ve el mismo
-comportamiento de siempre. `lib/audit.py::_tracker_find_related` es quien decide si pasar un
-`provider` (construido desde `llm:` en `.contextbase/config.yaml`) y degrada explicito a lexical
-si la llamada semantica falla en runtime (`LLMProviderError`), avisando por stderr.

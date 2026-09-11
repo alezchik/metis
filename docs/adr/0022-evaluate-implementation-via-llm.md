@@ -1,7 +1,7 @@
 # ADR 0022 -- Operacion nueva evaluate_implementation: evaluar codigo via LLM bajo demanda, con evidencia obligatoria
 
 Fecha: 2026-09-10
-Estado: aceptada
+Estado: superseded by ADR-0025
 
 ## Contexto
 

@@ -11,6 +11,14 @@ sigue esta documentado ahi, este archivo lo baja a tareas concretas del lado de
 (`search_knowledge`, `propose_decision`) ya existen, ya estan probadas, y no cambian
 para esta integracion.
 
+**Nota (`docs/adr/0025`, 2026-09-11 -- Metis sin servidor).** El contrato de mas abajo
+se escribio asumiendo un MCP server por proyecto (seccion 5.1 de la especificacion
+tecnica de esa fecha). Ese servicio se elimino antes de implementarse: Metis paso a
+ser un repo de CLIs sin transporte, invocado directo por quien lo usa. Este documento
+se actualizo para reflejar el contrato vigente -- las dos operaciones en si
+(`search_knowledge`, `propose_decision`) no cambiaron de forma ni de contrato de
+datos, solo de "como se invocan".
+
 ---
 
 ## Cambio 1 -- el Investigator agrega Metis como primer paso de busqueda
@@ -19,7 +27,7 @@ para esta integracion.
 
 El Investigator de Dedalo hoy busca en frio contra repos/tracker/Notion cada vez que
 arranca una iniciativa nueva (jerarquia de evidencia: semantico -> archivo puntual ->
-grep). Cuando el proyecto en cuestion tiene un Metis desplegado, el nuevo orden es:
+grep). Cuando el proyecto en cuestion tiene un Context Base, el nuevo orden es:
 
 ```
 1. search_knowledge(query) contra Metis        <- NUEVO, primer paso
@@ -37,19 +45,26 @@ un paso, no reemplaza la jerarquia existente.
 
 ### Contrato tecnico exacto
 
-El Investigator llama al MCP server de Metis, exactamente como cualquier otro
-cliente MCP -- no hay un cliente especial ni un adapter nuevo de por medio.
+No hay MCP server que conectar (`docs/adr/0025`): la sesion de Claude que corre el
+Investigator invoca directo `lib/index.py` del repo Metis, pasandole el
+`--knowledge-dir` del Context Base del proyecto -- ni proceso que levantar, ni
+conexion que mantener, cada llamada corre y termina.
 
-**Conectar al MCP server de un proyecto** (uno por proyecto/cliente, seccion 5.1 de
-la especificacion de Metis -- nunca un servidor compartido):
+**Invocar la busqueda** (un repo Metis clonado localmente, o accesible por el
+harness que corre el Investigator -- nunca un servidor compartido, mismo principio
+de aislamiento por proyecto que antes, ahora dado por `--knowledge-dir` en vez de
+por deployment separado):
 
 ```bash
-claude mcp add metis -- python3 /ruta/al/repo-metis-del-cliente/context_assistant/mcp_server.py --knowledge-dir /ruta/al/repo-metis-del-cliente/knowledge
+python3 /ruta/al/repo-metis/lib/index.py --knowledge-dir /ruta/al/repo-contextbase-del-cliente/knowledge search "query en lenguaje natural" [--type decision|requirement|risk|system|meeting|glossary-term]
 ```
 
-(o el equivalente segun como el Investigator arme sus conexiones MCP hoy).
+(el Investigator invoca esto como cualquier otro comando de shell -- no como una tool
+call MCP; ver `README.md` de Metis para el detalle exacto de flags y salida JSON).
 
-**Operacion a llamar:**
+**Operacion equivalente, para quien prefiera invocar la funcion Python directo en vez
+del CLI (ej. si el Investigator ya corre en el mismo proceso/entorno que tiene Metis
+importado):**
 
 ```
 search_knowledge(query: str, type: str | None = None) -> list[dict]
@@ -89,28 +104,28 @@ ausencia explicita nunca silenciosa).
 
 ### Cuando NO esta disponible
 
-Si el proyecto no tiene Metis desplegado (todavia, o nunca), el Investigator
+Si el proyecto no tiene Context Base (todavia, o nunca), el Investigator
 simplemente no tiene este paso disponible y sigue con su jerarquia de evidencia
 actual sin degradar nada -- la integracion es **aditiva**, nunca una dependencia
-dura. Sugerencia de implementacion: detectar la disponibilidad intentando la
-conexion MCP una vez al arrancar la iniciativa (no en cada query), y cachear el
-resultado (disponible/no disponible) para el resto de esa corrida.
+dura. Sugerencia de implementacion: detectar la disponibilidad chequeando una vez
+al arrancar la iniciativa (no en cada query) si el `--knowledge-dir` configurado
+existe y es un Context Base valido, y cachear el resultado (disponible/no
+disponible) para el resto de esa corrida.
 
 ### Como probar sin un cliente real
 
 Este mismo repo (`metis`) trae un Context Base "de mentira" completo en
 `fixtures/contextbase/` (10 entradas de ejemplo, los seis tipos, una entrada
-`disputed` real) y un servidor MCP que lo sirve por default:
+`disputed` real):
 
 ```bash
-python3 /ruta/a/metis/context_assistant/mcp_server.py
-# sin --knowledge-dir: sirve fixtures/contextbase/knowledge EN MODO SOLO LECTURA
+python3 /ruta/a/metis/lib/index.py --knowledge-dir /ruta/a/metis/fixtures/contextbase/knowledge search "query de prueba"
 ```
 
-Apuntar el Investigator (en un entorno de test) contra ese server es la forma de
-probar el paso nuevo de punta a punta sin necesitar un cliente real con Metis
-desplegado -- mismo espiritu que los dry-runs que Dedalo ya usa para probar sus
-propios flujos sin tocar produccion.
+Apuntar el Investigator (en un entorno de test) contra ese fixture es la forma de
+probar el paso nuevo de punta a punta sin necesitar un Context Base de cliente real
+-- mismo espiritu que los dry-runs que Dedalo ya usa para probar sus propios flujos
+sin tocar produccion.
 
 ---
 
@@ -120,7 +135,7 @@ propios flujos sin tocar produccion.
 
 Hoy, cuando una iniciativa llega a `DONE`, sus artefactos (`decisions.jsonl`,
 evidencia, preguntas) quedan en `initiatives/<nombre>/`, gitignoreado, y se
-descartan. Si el proyecto tiene Metis desplegado, Gate D (el mismo gate que ya
+descartan. Si el proyecto tiene Context Base, Gate D (el mismo gate que ya
 aprueba publicar el ticket) agrega un **paso opcional, no obligatorio, no
 automatico**: la misma persona que aprueba el gate puede marcar, decision por
 decision, cual vale la pena promover a Context Base como memoria permanente del
@@ -131,14 +146,18 @@ permanente -- algunas son detalle de implementacion de esa iniciativa puntual.
 
 ### Contrato tecnico exacto
 
-Por cada decision que el aprobador marca para promover, llamar:
+Por cada decision que el aprobador marca para promover, invocar (`docs/adr/0025` --
+sin MCP server, CLI directo):
 
-```
-propose_decision(payload: dict) -> dict
+```bash
+python3 /ruta/al/repo-metis/lib/propose_cli.py --knowledge-dir /ruta/al/repo-contextbase-del-cliente/knowledge --payload payload.json decision
 ```
 
-via el mismo MCP server de Metis del proyecto. El mapeo de campos desde lo que
-Dedalo ya arma para su propio `decisions.jsonl` es casi 1:1:
+donde `payload.json` tiene el mismo shape que el payload de la funcion
+`propose_decision(payload: dict) -> dict` de `lib/write_agent.py` (invocable
+directo en Python en vez del CLI, si el entorno de Dedalo ya tiene Metis
+importado). El mapeo de campos desde lo que Dedalo ya arma para su propio
+`decisions.jsonl` es casi 1:1:
 
 | Campo en `decisions.jsonl` de Dedalo | Campo en el payload de `propose_decision` |
 |---|---|
@@ -171,8 +190,9 @@ revisa despues, exactamente igual que cualquier otro PR de codigo.
 
 Mismo fixture que el Cambio 1 (`fixtures/contextbase/`), pero **con escritura
 habilitada** -- pasar `--knowledge-dir` apuntando a una copia descartable del
-fixture (nunca sin `--knowledge-dir`, que sirve el fixture real de este repo en modo
-solo lectura a proposito, ver `docs/adr/0006`). El propio repo `metis` tiene un
+fixture (`--knowledge-dir` es siempre obligatorio en `lib/propose_cli.py`, sin
+ningun default que caiga sobre el fixture real de este repo, a proposito -- ver
+`docs/adr/0025`). El propio repo `metis` tiene un
 ejemplo end-to-end de esto en `tests/test-write-agent.py` (arma un Context Base
 descartable, llama `propose_decision`, simula el merge con git real, verifica que la
 decision queda `confirmed`).

@@ -12,10 +12,9 @@ cerrado no alcanza sin verificar contra codigo" (docs/design/plan-auditoria-
 implementacion.md seccion 1.1), la discrepancia explicita cuando una cita a un
 ticket ya no resuelve, la degradacion explicita sin tracker configurado
 (docs/adr/0016 punto 7) y la aproximacion marcada sin codigo configurado, el
-matching sin cita explicita via similitud de titulo (seccion 4 del plan), el orden
+matching sin cita explicita via similitud de titulo (seccion 4 del plan), y el orden
 de prioridad sugerido (seccion 5: depends_on + severidad de riesgo relacionado +
-antiguedad), y que context_assistant/core.py::Deployment.audit_gaps delega en esta
-misma funcion sin reimplementar nada (seccion 5.2).
+antiguedad).
 """
 from __future__ import annotations
 
@@ -31,7 +30,6 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from adapters.code import git_log  # noqa: E402
 from adapters.tracker import file_tracker  # noqa: E402
-from context_assistant.core import Deployment  # noqa: E402
 from lib.audit import audit_gaps  # noqa: E402
 
 failures: list[str] = []
@@ -287,16 +285,6 @@ def main() -> int:
             "un requirement status=proposed nunca se audita (solo confirmed)",
             result_after_proposed["n_requirements_audited"] == 6 and "REQ-0007" not in audited_ids,
         )
-
-        # --- context_assistant/core.py::Deployment.audit_gaps delega, nunca reimplementa ---
-        deployment = Deployment(knowledge_dir, writes_enabled=False)
-        result_via_deployment = deployment.audit_gaps()
-        check(
-            "Deployment.audit_gaps() delega en lib.audit.audit_gaps sin reimplementar nada",
-            result_via_deployment["n_requirements_audited"] == result_after_proposed["n_requirements_audited"],
-        )
-        result_via_deployment_one = deployment.audit_gaps("REQ-0001")
-        check("Deployment.audit_gaps(id) tambien delega el filtro por requirement_id", result_via_deployment_one["n_requirements_audited"] == 1)
 
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)

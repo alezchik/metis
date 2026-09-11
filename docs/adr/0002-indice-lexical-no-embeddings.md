@@ -1,7 +1,10 @@
 # ADR 0002 -- Indice lexical (TF-IDF liviano) para el MVP de Fase 1, no embeddings
 
 Fecha: 2026-09-09
-Estado: superseded by ADR-0021
+Estado: aceptada (`docs/adr/0021` la supersedio brevemente en favor de un motor de
+embeddings; `docs/adr/0021` se revirtio por completo con `docs/adr/0025` antes de
+llegar a un piloto real, asi que esta decision -- TF-IDF liviano, sin embeddings --
+vuelve a ser la vigente)
 
 ## Contexto
 

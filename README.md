@@ -2,8 +2,18 @@
 
 Memoria permanente de proyecto: una unica fuente de verdad en Markdown (Context Base)
 que las personas consultan en lenguaje natural y que los agentes leen como contexto
-permanente, mas un servicio hosteado (Context Assistant) que la hace consultable y
-editable -- sin que las dos puedan divergir nunca.
+permanente. Sin servidor propio (`docs/adr/0025`): Metis es un repositorio de
+schemas, contratos, CLIs deterministas y skills -- el procesamiento (busqueda,
+redaccion, evaluacion) lo da la sesion de Claude de quien este operando el proyecto
+en ese momento, leyendo estos repos directamente.
+
+Tres repos, ningun deployment:
+
+1. **Este repo (Metis)** -- shell y skills, generico, no se instala por cliente.
+2. **El repo de codigo del cliente** -- el que ya existia.
+3. **Context Base** -- el repo de conocimiento del cliente/proyecto (markdown,
+   frontmatter estructurado), compartido con el equipo por permisos de git normales,
+   actualizado via PR.
 
 Parte del mismo ecosistema que **Dedalo** (idea -> ticket) y **Talos** (ticket -> PR
 verificado mecanicamente). Metis no genera tickets ni PRs de codigo: es la capa de
@@ -16,9 +26,9 @@ contribucion y `ROADMAP.md` para el estado y los huecos conocidos.
 ## Documentacion
 
 - [`docs/design/spec-tecnica-funcional.md`](docs/design/spec-tecnica-funcional.md) --
-  fuente de verdad de diseno: arquitectura, schemas, pipeline de ingesta, contrato de
-  las entradas (MCP/API -- Slack app y web app quedan fuera de alcance, `docs/adr/0017`),
-  plan de fases. Leer esto antes de cambiar algo estructural.
+  fuente de verdad de diseno: arquitectura, schemas, pipeline de ingesta, como se
+  ejecutan las operaciones sin servidor (`docs/adr/0025`), plan de fases. Leer esto
+  antes de cambiar algo estructural.
 - [`docs/design/frontera-ecosistema-talos.md`](docs/design/frontera-ecosistema-talos.md)
   -- contrato de integracion con Dedalo/Talos (Fase 5).
 - [`docs/design/primeros-pasos.md`](docs/design/primeros-pasos.md) -- guia operativa de
@@ -39,26 +49,24 @@ contribucion y `ROADMAP.md` para el estado y los huecos conocidos.
 ## Estado
 
 **Fase 0, 1, 2 y 3 completas. Fase 4 completa con alcance explicito (`docs/adr/0010`).**
-Fase 0: los seis schemas + validador + fixtures. Fase 1: indice lexical + MCP server
-de solo lectura. Fase 2: Write Agent (`propose_decision`/`propose_update`) + flujo de
-PR completo, disparado conversacionalmente via el mismo MCP server. Fase 3: primer
-conector de ingesta (reuniones) -- pipeline completo captura cruda -> destilacion ->
-dedup/match -> propuesta. Fase 4: la logica de Query/Write Agent se extrajo a
-`context_assistant/core.py`, compartida por el transporte MCP y un transporte API
-REST nuevo (seccion 8.2); el flujo de superseding/`disputed` se activo desde ingesta
-real (`docs/adr/0009`) -- una segunda reunion que contradice una decision `confirmed`
-ya marca esa entrada `disputed`, citando ambas fuentes. Conectores de
-Confluence/Notion/mail quedan diferidos (`docs/adr/0010`) -- ver criterios de salida en
-`docs/design/spec-tecnica-funcional.md` seccion 10. Slack app y web app quedan fuera de
-alcance del producto, no solo diferidas (`docs/adr/0017`). **Fase 5, lado de Metis: completo sin trabajo adicional** -- el contrato
-de frontera con Dedalo/Talos (`docs/design/frontera-ecosistema-talos.md`) ya lo
-satisfacen integramente las operaciones de Fase 1/2 (`docs/adr/0011`); lo que falta
-de esa integracion vive del lado de los repos `talosprd`/`talos`, no de este.
+Fase 0: los seis schemas + validador + fixtures. Fase 1: indice lexical + retrieval
+(`lib/index.py`, hoy invocado directo por CLI, ver mas abajo -- `docs/adr/0025`).
+Fase 2: Write Agent (`propose_decision`/`propose_update`, hoy via `scripts/propose.sh`)
++ flujo de PR completo. Fase 3: primer conector de ingesta (reuniones) -- pipeline
+completo captura cruda -> destilacion -> dedup/match -> propuesta. Fase 4: el flujo
+de superseding/`disputed` se activo desde ingesta real (`docs/adr/0009`) -- una
+segunda reunion que contradice una decision `confirmed` ya marca esa entrada
+`disputed`, citando ambas fuentes. Conectores de Confluence/Notion/mail quedan
+diferidos (`docs/adr/0010`) -- ver criterios de salida en
+`docs/design/spec-tecnica-funcional.md` seccion 10. **Fase 5, lado de Metis: completo
+sin trabajo adicional** -- el contrato de frontera con Dedalo/Talos
+(`docs/design/frontera-ecosistema-talos.md`) ya lo satisfacen integramente las
+operaciones de Fase 1/2 (`docs/adr/0011`); lo que falta de esa integracion vive del
+lado de los repos `talosprd`/`talos`, no de este.
 **Fase 6 -- Auditoria de brechas:** `audit_gaps(requirement_id?)` cruza los
 `requirement` `confirmed` contra un tracker y el codigo del cliente EN VIVO en cada
 consulta (nunca cachea el resultado, `docs/adr/0016`/`docs/adr/0019`) -- funciona
-sin Dedalo ni Talos desplegados, via MCP/API o el script standalone
-`scripts/audit-gaps.sh`.
+sin Dedalo ni Talos desplegados, via el script standalone `scripts/audit-gaps.sh`.
 **Ingesta de documentos (docs/PDF/Excel/imagenes, `docs/adr/0015`/`docs/adr/0020`):**
 cuatro conectores nuevos bajo `adapters/ingestion/` -- `document_file.py`
 (`.docx`/`.txt`/`.md`), `pdf_file.py`, `spreadsheet_file.py` (`.xlsx`/`.csv`) e
@@ -70,20 +78,32 @@ destilacion de estas cuatro fuentes (un rol agentico propio o una generalizacion
 de `skills/metis-ingest-meeting/SKILL.md`) queda fuera de este alcance -- ver
 `docs/adr/0020`.
 
-**Fase 7 -- motor de busqueda semantica (`docs/adr/0021`, supersede a `docs/adr/0002`):**
-`search_knowledge()`/`find_related()` (tracker) usan embeddings en vez de TF-IDF/`difflib`
-cuando hay un motor de IA configurado (`llm:` en `.contextbase/config.yaml`) -- resuelve cruce
-de idioma y parafraseo, que el matching lexical nunca pudo resolver. Sin `llm:` configurado,
-ambos siguen funcionando exactamente igual que antes (degradacion explicita, `docs/adr/0024`).
-**Fase 8 -- `evaluate_implementation(requirement_id)` (`docs/adr/0022`):** octava operacion del
-contrato, evaluacion de codigo via LLM bajo demanda para el caso sin ticket previo -- arma
-contexto de codigo acotado por palabras clave (`adapters/code/git_log.py::search_content`, `git
-grep`, nunca el repo entero) y devuelve un veredicto siempre con evidencia puntual citada
-(archivo/linea/commit); sin esa evidencia, el propio adapter lo convierte en `inconclusive`.
-Convive con `audit_gaps()`, no lo reemplaza. Las dos fases comparten `adapters/llm/` -- interfaz
-comun (`embed`/`evaluate`) para proveedor externo (API key del cliente via
-`METIS_LLM_API_KEY`) o modelo servido internamente (`endpoint` obligatorio), ambos hablando el
-mismo protocolo "estilo OpenAI" -- cero dependencias nuevas (`docs/adr/0023`/`0024`).
+**Fase 7/8 -- motor de busqueda semantica + `evaluate_implementation` via LLM: implementadas y
+revertidas (`docs/adr/0025`).** Se construyeron de punta a punta (embeddings para
+`search_knowledge`/`find_related`, un adaptador `adapters/llm/` con dos modos -- proveedor
+externo/self-hosted --, y una octava operacion `evaluate_implementation`), pero el mismo dia se
+decidio un pivote de arquitectura mas grande (`docs/adr/0025`, ver "Sin servidor" mas abajo) que
+las vuelve innecesarias: la comprension semantica que buscaban resolver con un adaptador de IA
+propio la resuelve directamente la sesion de Claude que ya esta leyendo el Context Base -- no
+hace falta vectorizar nada. El codigo de ambas fases se elimino de este repo; queda como hueco
+abierto escribir la skill que reemplaza a `evaluate_implementation` (ver `ROADMAP.md`).
+
+## Sin servidor (`docs/adr/0025`)
+
+Metis no corre como servicio: no hay MCP server, no hay API REST, no hay adaptador de motor de
+IA propio. Las operaciones deterministas que antes exponia un transporte son hoy CLIs directos,
+pensados para que una skill (o una persona) los invoque por Bash:
+
+| Operacion | CLI |
+|---|---|
+| `search_knowledge`/`get_decision`/`get_requirement`/`list_open_questions` | `python3 lib/index.py search\|get\|list-open-questions ...` |
+| `audit_gaps` | `scripts/audit-gaps.sh` |
+| `propose_decision`/`propose_update` | `scripts/propose.sh` |
+| ingesta (reuniones/documentos) | `scripts/ingest-capture.sh` + `scripts/run-ingestion-pipeline.sh` |
+
+Todo lo demas (que la sesion busque semanticamente, que redacte una decision, que evalue si un
+requirement esta implementado sin ticket previo) lo hace la propia sesion de Claude leyendo estos
+repos, guiada por las skills de `skills/` -- nunca un servicio aparte.
 
 ## Estructura del repo
 
@@ -93,20 +113,23 @@ scripts/
   contextbase-install.sh   scaffolding de un Context Base vacio para un cliente nuevo
   validate-entries.sh      corre el validador contra un knowledge/ (para CI del cliente)
   reindex.sh               reconstruye el indice lexical contra un knowledge/
-  mcp-serve.sh             levanta el MCP server (Fase 1, solo lectura) por stdio
   audit-gaps.sh            Fase 6: corre audit_gaps y escribe un reporte Markdown a disco
+  propose.sh               Write Agent sin transporte: propose_decision/propose_update (docs/adr/0025)
+  ingest-capture.sh        paso 1 de ingesta: trae y guarda una captura cruda
+  run-ingestion-pipeline.sh paso 2 de ingesta: destilacion -> dedup/match -> propuesta
 lib/
   validate_frontmatter.py  nucleo deterministico: YAML frontmatter + JSON Schema
-  index.py                 indice lexical derivado + retrieval + get-by-id (Fase 1)
+  index.py                 indice lexical derivado + retrieval + get-by-id (Fase 1), CLI directo
   config.py                 resolucion compartida de .contextbase/config.yaml
   state_machine.py          lee entry-state-machine.json, valida transiciones
   write_agent.py            Write Agent: redacta, valida y propone (Fase 2)
+  propose_cli.py            CLI de lib/write_agent.py -- sin transporte (docs/adr/0025)
   audit.py                  Fase 6: audit_gaps -- tracker+codigo en vivo, nunca cachea
-context_assistant/
-  mcp_server.py            servidor MCP: las 6 operaciones de la seccion 8.1
-                           (4 de lectura + propose_decision/propose_update)
-  ingestion.py             pipeline de ingesta: captura, umbral, dedup/match, propuesta,
-                           contradiccion->disputed (Fase 3 + Fase 4, docs/adr/0008-0009)
+  audit_gaps_cli.py         CLI de lib/audit.py::audit_gaps
+  ingestion.py              pipeline de ingesta: captura, umbral, dedup/match, propuesta,
+                            contradiccion->disputed (Fase 3 + Fase 4, docs/adr/0008-0009)
+  ingest_capture_cli.py     CLI del paso 1 de ingesta
+  run_ingestion_cli.py      CLI del paso 2 de ingesta
 adapters/
   CONTRACT.md              contrato del GitProvider que usa el Write Agent
   git_provider.py          rama + commit + PR (o su degradacion, ver docs/adr/0006)
@@ -127,11 +150,6 @@ adapters/
     git_log.py               `git log --grep` sobre un checkout local (Fase 6)
 skills/
   metis-ingest-meeting/SKILL.md   rol de destilacion (agentico) para reuniones
-context_assistant/
-  core.py                  Query Agent + Write Agent -- la UNICA logica, compartida
-                           por los dos transportes (seccion 5.2)
-  mcp_server.py            transporte MCP (seccion 8.1)
-  api_server.py            transporte API REST (seccion 8.2, Fase 4)
 fixtures/
   contextbase/       un Context Base "de mentira" completo, para probar sin cliente real
   ingestion/         dos transcripciones de ejemplo (una reunion + su seguimiento que
@@ -139,16 +157,13 @@ fixtures/
 tests/
   test-validate-entries.sh      Fase 0: un archivo bien formado pasa, uno mal formado falla
   test-context-assistant.sh     Fase 1: retrieval/get/list_open_questions contra el fixture
-  test-mcp-protocol.sh          Fase 1+6: operaciones de lectura + audit_gaps via MCP real (stdio)
   test-write-agent.sh           Fase 2: propose_decision/propose_update + merge simulado
-  test-mcp-write-protocol.sh    Fase 2: propose_decision via MCP real + el guard de escritura
   test-ingestion.sh             Fase 3+4: pipeline completo, dedup, umbral, seguridad, contradiccion
-  test-api-server.sh            Fase 4+6: las 7 operaciones via HTTP real + auth por API key
   test-audit.sh                 Fase 6: conectores tracker/codigo + audit_gaps de punta a punta
   test-document-ingestion.sh    Ingesta de documentos: document_file/pdf_file/spreadsheet_file/image_file
   test-linear-tracker.sh        Conector de tracker Linear: logica + wiring en lib/audit.py (transporte simulado)
 docs/
-  design/            los tres documentos de diseno (fuente de verdad)
+  design/            los documentos de diseno (fuente de verdad)
   adr/               decisiones de arquitectura tomadas durante la construccion
 ```
 
@@ -181,59 +196,36 @@ scripts/validate-entries.sh                        # sin argumentos, valida fixt
 Sale con status distinto de cero si alguna entrada no valida contra su schema --
 pensado para correr en el CI del propio repo del cliente.
 
-## Indice (Fase 1 lexical -- docs/adr/0002; Fase 7 semantico -- docs/adr/0021)
+## Indice y busqueda (Fase 1 lexical -- docs/adr/0002; sin motor de IA propio, docs/adr/0025)
 
 ```bash
 scripts/reindex.sh                          # reconstruye contra fixtures/contextbase/knowledge
 scripts/reindex.sh /ruta/a/knowledge         # o contra un Context Base real
 python3 lib/index.py search /ruta/a/knowledge/../.contextbase/index/index.json "SSO Okta"
+python3 lib/index.py get /ruta/a/.../index.json DEC-0001 --type decision
+python3 lib/index.py list-open-questions /ruta/a/.../index.json
 ```
 
-`lib/index.py::search()` (TF-IDF liviano) es el motor default. Con `llm:` configurado en
-`.contextbase/config.yaml` (`adapters/llm/CONTRACT.md`), `context_assistant/core.py`
-usa en su lugar `lib/index.py::semantic_search()` -- compara embeddings en vez de tokens,
-resolviendo el caso que TF-IDF nunca pudo: un pedido en un idioma distinto al del contenido, o
-parafraseado distinto. El contrato de `search_knowledge()` no cambia entre los dos motores.
+`lib/index.py::search()` (TF-IDF liviano) es el unico motor de codigo -- no hay motor de
+embeddings propio (se probo y se revirtio, `docs/adr/0025`). Cuando el matching lexical no
+alcanza (un pedido en un idioma distinto al del contenido, parafraseado distinto), quien esta
+operando Metis -- una sesion de Claude -- lee el contenido directo y entiende el significado sin
+necesitar un indice vectorial.
 
-## Servidor MCP (Fase 1, solo lectura -- seccion 8.1)
+## Registrar una decision o actualizar una entrada (Fase 2 -- Write Agent, docs/adr/0025)
 
 ```bash
-scripts/mcp-serve.sh --knowledge-dir /ruta/a/knowledge
-# o, sin argumentos, sirve fixtures/contextbase/knowledge (solo para probar)
+scripts/propose.sh --knowledge-dir /ruta/a/knowledge --payload payload.json decision
+scripts/propose.sh --knowledge-dir /ruta/a/knowledge --payload patch.json update --id DEC-0001
 ```
 
-Registrarlo en un cliente MCP (ej. Claude Code):
-
-```bash
-claude mcp add metis -- python3 /ruta/a/metis/context_assistant/mcp_server.py --knowledge-dir /ruta/a/knowledge
-```
-
-Expone `search_knowledge(query, type?)`, `get_decision(id)`, `get_requirement(id)`,
-`list_open_questions()`, `audit_gaps(requirement_id?)` y `evaluate_implementation(requirement_id)`
--- las seis operaciones de lectura (las primeras cuatro de la especificacion original, seccion
-8.1; `audit_gaps` se sumo en Fase 6 y `evaluate_implementation` en Fase 8, ver mas abajo).
-`list_open_questions()` devuelve las entradas en estado `disputed` (ver
-`docs/adr/0003-preguntas-abiertas-son-disputed.md`). `search_knowledge()` usa embeddings en vez
-de TF-IDF cuando hay un motor de IA configurado (`llm:` en `.contextbase/config.yaml`, ver
-`docs/adr/0021`) -- degrada explicito a busqueda lexical si no. La logica de las ocho operaciones
-(estas seis + las dos de escritura de la seccion siguiente) vive en `context_assistant/core.py`
--- este archivo es solo el transporte MCP, lo mismo que sirve `context_assistant/api_server.py`
-(seccion 8.2, Fase 4) por HTTP.
-
-## Write Agent (Fase 2 -- seccion 5.2/8.1/2)
-
-Las mismas cuatro tools de lectura de Fase 1, mas dos de escritura, expuestas por el
-mismo `scripts/mcp-serve.sh`:
-
-- `propose_decision(payload)` -- registra una decision nueva. `payload` necesita
-  `title`, `evidence` (lista, minimo 1 cita), `confidence`, `requested_by`; `decided_by`
-  es opcional (si viene, el status por default es `confirmed`, si no `proposed` --
-  ver `docs/adr/0007`).
-- `propose_update(id, payload)` -- actualiza una entrada existente. `payload`
-  necesita `patch` (los campos a cambiar, ej. `{"status": "superseded",
-  "superseded_by": "DEC-0005"}`), `reason`, `requested_by`. Un cambio de `status` se
-  valida contra `schemas/entry-state-machine.json` -- una transicion no declarada se
-  rechaza antes de tocar git.
+- `decision`: `payload.json` necesita `title`, `evidence` (lista, minimo 1 cita),
+  `confidence`, `requested_by`; `decided_by` es opcional (si viene, el status por default es
+  `confirmed`, si no `proposed` -- ver `docs/adr/0007`).
+- `update --id <id>`: `payload.json` necesita `patch` (los campos a cambiar, ej.
+  `{"status": "superseded", "superseded_by": "DEC-0005"}`), `reason`, `requested_by`. Un cambio
+  de `status` se valida contra `schemas/entry-state-machine.json` -- una transicion no declarada
+  se rechaza antes de tocar git.
 
 Ninguna de las dos mergea ni escribe directo a la rama que estaba checked-out --
 siempre abren una rama nueva (`metis/<id>`) y, segun lo que haya disponible
@@ -241,39 +233,9 @@ siempre abren una rama nueva (`metis/<id>`) y, segun lo que haya disponible
 para que un humano abra el PR a mano, o dejan el commit solo en local con las
 instrucciones exactas para terminarlo (ver `docs/adr/0006`).
 
-**Salvaguarda:** si el server esta sirviendo el fixture de ejemplo por default (sin
-`--knowledge-dir`), ambas herramientas se rechazan con `{"error": "writes_disabled"}`
--- `fixtures/contextbase` vive dentro de este mismo repo, y proponer contra el por
-accidente abriria una rama/PR real contra `alezchik/metis`.
-
-## API REST (Fase 4, seccion 8.2)
-
-```bash
-scripts/api-serve.sh --knowledge-dir /ruta/a/knowledge --api-key <key> [--port 8787]
-```
-
-Espejo delgado de las mismas seis operaciones, para automatizaciones del cliente que
-no hablan MCP -- mismo `context_assistant/core.py` por debajo, mismo guard de
-`writes_disabled` sobre el fixture de ejemplo. Requiere `X-Api-Key` en cada request
-(header) -- el proceso se niega a arrancar si no se paso `--api-key` ni se seteo
-`METIS_API_KEY` (nunca sirve sin autenticacion por default).
-
-```
-GET  /search?q=<query>&type=<type?>    -> search_knowledge
-GET  /decisions/<id>                   -> get_decision
-GET  /requirements/<id>                -> get_requirement
-GET  /open-questions                   -> list_open_questions
-GET  /audit-gaps?requirement_id=<id?>  -> audit_gaps (Fase 6, ver mas abajo)
-POST /decisions            {payload}   -> propose_decision
-POST /entries/<id>/updates {payload}   -> propose_update
-```
-
-Un error de dominio (`not_found`, `writes_disabled`, `invalid_proposal`, ...) viaja
-siempre en el body con status HTTP 200 -- la logica de negocio es identica sea cual
-sea el transporte (seccion 5.2), asi que el status HTTP nunca cambia segun el tipo de
-error de dominio. Los unicos status distintos de 200 son de transporte puro: `401`
-(falta o es invalida la API key), `404` (la ruta en si no existe), `400` (el body del
-POST no es JSON valido).
+`--knowledge-dir` es siempre obligatorio (`scripts/propose.sh`/`lib/propose_cli.py` no tienen
+ningun default) -- a diferencia del viejo transporte MCP/API, no hay riesgo de proponer sin
+querer contra el fixture de este mismo repo por olvidar un flag.
 
 ## Ingesta (Fase 3 -- seccion 6/7, primer conector: reuniones)
 
@@ -300,7 +262,7 @@ clasificados `FACT`/`INFERENCE` (nunca `UNKNOWN`, que se registra aparte como
 (`.contextbase/config.yaml: ingestion.confidence_threshold`), hace dedup/match contra
 el indice (evita re-proponer lo mismo dos veces -- ver alcance exacto en
 `docs/adr/0008`), y propone lo que sobrevive via `lib/write_agent.propose_new_entry`
-(la misma via de PR de Fase 2, sin operaciones MCP nuevas). Toda entrada que sale de
+(la misma via de PR de Fase 2, sin operaciones nuevas). Toda entrada que sale de
 ingesta queda `status: proposed`, nunca `confirmed` -- ver `docs/adr/0008`.
 
 **Seguridad (seccion 7):** si el texto crudo de una captura tiene forma de
@@ -381,42 +343,27 @@ variable de entorno `LINEAR_API_KEY`) -- sin eso, `audit_gaps()` devuelve
 verificar contra un commit mergeado -- `docs/design/plan-auditoria-implementacion.md`
 seccion 1.1).
 
-Tambien expuesto por MCP (`audit_gaps(requirement_id?)`) y por API REST
-(`GET /audit-gaps?requirement_id=<id?>`) -- misma logica de `context_assistant/core.py`
-por debajo, sin reimplementar nada (seccion 5.2). Decisiones de implementacion (que
-tracker primero, el enum `source` nuevo, como leer codigo) en `docs/adr/0019`.
+Decisiones de implementacion (que tracker primero, el enum `source` nuevo, como leer codigo)
+en `docs/adr/0019`.
 
-## Evaluacion de codigo via LLM (Fase 8 -- sin ticket previo, `docs/adr/0022`)
+## Evaluar si un requirement sin ticket ya esta implementado (skill pendiente, `docs/adr/0025`)
 
-```
-evaluate_implementation(requirement_id)   # via MCP, o GET /evaluate-implementation?requirement_id=... (API REST)
-```
-
-Complementa `audit_gaps()` para el caso en que un `requirement` no tiene NINGUN ticket (ni
-citado ni por matching) -- sin un `ref` de tracker, el conector de codigo no tiene nada que
-grepear. Esta operacion arma un contexto de codigo acotado por palabras clave del propio
-requirement (`adapters/code/git_log.py::search_content`, `git grep` sobre el checkout, nunca el
-repo entero) y le pide un veredicto a un motor de IA (`adapters/llm/CONTRACT.md::evaluate`) --
-siempre con evidencia puntual citada (archivo/linea/commit); un veredicto sin esa evidencia se
-convierte en `inconclusive` ANTES de salir del adapter. `deterministic` siempre `false` -- nunca
-se trata como un hecho equivalente a `audit_gaps()` (grep + estado de tracker, deterministico).
-Convive con `audit_gaps()`, no lo reemplaza -- el chequeo barato es siempre el primer intento.
-
-Requiere `code:` Y `llm:` configurados en `.contextbase/config.yaml` -- a diferencia de
-`audit_gaps()` (que corre sin `code:`, marcando `approximation`), esta operacion no tiene un
-modo aproximado: sin cualquiera de los dos, devuelve `{"error": "code_not_configured"}` /
-`{"error": "llm_not_configured"}` explicito.
+`evaluate_implementation(requirement_id)` existio brevemente como operacion de codigo (Fase 8,
+`docs/adr/0022`, un LLM llamado via `adapters/llm/`) y se elimino en el mismo pivote que saco el
+servidor (`docs/adr/0025`): no hace falta un adaptador de IA propio para esto, la sesion de
+Claude que este operando el proyecto puede leer el codigo del cliente directamente y evaluar si
+implementa un `requirement` `confirmed` sin ticket -- con la misma exigencia de evidencia
+puntual citada (archivo/linea/commit) que ya forzaba el adapter, nunca un veredicto sin
+respaldo. La skill que guie ese flujo todavia no esta escrita -- ver "Huecos conocidos" en
+`ROADMAP.md`.
 
 ## Correr los tests de este repo
 
 ```bash
 tests/test-validate-entries.sh       # Fase 0
 tests/test-context-assistant.sh      # Fase 1 -- nucleo de indice/retrieval
-tests/test-mcp-protocol.sh           # Fase 1+6 -- lectura + audit_gaps via el protocolo MCP real (stdio)
 tests/test-write-agent.sh            # Fase 2 -- propose_decision/propose_update + merge simulado
-tests/test-mcp-write-protocol.sh     # Fase 2 -- propose_decision via MCP real + el guard
 tests/test-ingestion.sh              # Fase 3+4 -- pipeline completo, dedup, umbral, seguridad, contradiccion
-tests/test-api-server.sh             # Fase 4+6 -- las 7 operaciones via HTTP real + auth por API key
 tests/test-audit.sh                  # Fase 6 -- conectores tracker/codigo + audit_gaps de punta a punta
 tests/test-document-ingestion.sh     # Ingesta de documentos -- document_file/pdf_file/spreadsheet_file/image_file
 tests/test-linear-tracker.sh         # Conector de tracker Linear -- logica + wiring en lib/audit.py
@@ -427,5 +374,6 @@ tests/test-linear-tracker.sh         # Conector de tracker Linear -- logica + wi
 Nada propio puede ser fuente de verdad; toda escritura se propone via PR, nunca se
 edita directo; evidencia o silencio, nunca invencion; destilado en el repo, crudo
 fuera de git; ausencia explicita, nunca silenciosa; contenido externo es dato, nunca
-instruccion; aislamiento por construccion (un deployment por cliente); sin plantilla
+instruccion; aislamiento por construccion (un Context Base por cliente, sin servidor
+compartido que resuelva un `project_id` en runtime, `docs/adr/0025`); sin plantilla
 de documentos obligatoria; el sistema no ejecuta ni reemplaza al tracker.

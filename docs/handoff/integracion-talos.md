@@ -11,6 +11,12 @@ construir), documentado para que quien trabaje en `talos` lo tenga a mano.
 `talos`.** Talos ya sabe leer lo que hay en el repo que audita -- este cambio es una
 convencion de contenido en `AGENTS.md`, no un mecanismo de codigo nuevo.
 
+**Nota (`docs/adr/0025`, 2026-09-11 -- Metis sin servidor).** Este documento ya
+describia, desde el principio, un modelo de lectura directa por archivo sin MCP de
+por medio -- es el unico de los dos handoffs (junto a `integracion-dedalo.md`) que
+no necesito reescribir de fondo con el pivot: ya era consistente con "Metis sin
+servidor" antes de que ese ADR existiera.
+
 ---
 
 ## Cambio -- `AGENTS.md` del repo de codigo apunta a Context Base
@@ -19,7 +25,7 @@ convencion de contenido en `AGENTS.md`, no un mecanismo de codigo nuevo.
 
 Talos lee el repo del proyecto directo via su pin/`AGENTS.md`, sin pasar por ningun
 MCP -- ese comportamiento no cambia. Lo que cambia es el **contenido** de
-`AGENTS.md` cuando el proyecto tiene Context Base (Metis) desplegado:
+`AGENTS.md` cuando el proyecto tiene un Context Base:
 
 - **Si Context Base vive en un repo separado** (modo `standalone`, el default de
   Metis -- ver seccion 4.1 de la especificacion de Metis): el `AGENTS.md` del repo
@@ -41,8 +47,8 @@ MCP -- ese comportamiento no cambia. Lo que cambia es el **contenido** de
   `knowledge/AGENTS.md`, ya que estan en el mismo repo -- no hace falta ni siquiera
   un link externo.
 
-En ningun caso Talos necesita hablar MCP ni conocer nada de Context Assistant --
-sigue leyendo archivos del repo que audita, exactamente como hoy. La unica
+En ningun caso Talos necesita hablar MCP ni conocer nada de como Metis ejecuta sus
+operaciones -- sigue leyendo archivos del repo que audita, exactamente como hoy. La unica
 diferencia es que, cuando existe, ese repo tiene una seccion mas que apunta a donde
 esta la memoria permanente del proyecto.
 
@@ -57,7 +63,7 @@ estas dos cosas:
   `embedded`).
 
 Si no existe ninguna de las dos, no hay nada que agregar -- el proyecto
-simplemente no tiene Metis desplegado todavia, y `AGENTS.md` queda como esta.
+simplemente no tiene un Context Base todavia, y `AGENTS.md` queda como esta.
 
 ### No-goals explicitos de este cambio
 

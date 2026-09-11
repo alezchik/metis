@@ -1,7 +1,7 @@
 # ADR 0021 -- Busqueda semantica (embeddings) reemplaza el indice lexical para search_knowledge y find_related
 
 Fecha: 2026-09-10
-Estado: aceptada -- supersede a `docs/adr/0002`
+Estado: superseded by ADR-0025 (seguia supersediendo a `docs/adr/0002` mientras estuvo vigente)
 
 ## Contexto
 

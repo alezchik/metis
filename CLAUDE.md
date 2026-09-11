@@ -6,11 +6,10 @@ construccion de Fase 0-5.
 
 ## Reglas fijas
 
-- **Nada propio puede ser fuente de verdad.** `context_assistant/` (indice, MCP,
-  API REST) se reconstruye entero desde `knowledge/` en cualquier momento
-  (`lib/index.py build_index`). Si una funcion nueva necesita guardar algo que no
-  se pueda reconstruir asi, esta mal ubicada -- pertenece a Context Base, no a
-  Context Assistant.
+- **Nada propio puede ser fuente de verdad.** El indice (`lib/index.py`) se
+  reconstruye entero desde `knowledge/` en cualquier momento (`build_index`). Si una
+  funcion nueva necesita guardar algo que no se pueda reconstruir asi, esta mal
+  ubicada -- pertenece a Context Base, no a este repo.
 - **Se propone, nunca se edita.** Todo lo que toca `knowledge/` pasa por
   `adapters/git_provider.py::propose()` (via `lib/write_agent.py`) -- nunca un
   commit directo a la rama que estaba checked-out. Ver `adapters/CONTRACT.md`.
@@ -29,9 +28,10 @@ construccion de Fase 0-5.
   `scan_for_embedded_instructions` y de que `run_pipeline` frene toda una corrida
   (`security_review_required`) ante cualquier hallazgo -- nunca aflojarla para que
   "un caso particular" pase de largo.
-- **Un deployment por proyecto/cliente.** Nunca agregar un `project_id` ni logica
-  de resolucion multi-tenant a `context_assistant/`. Cada `Deployment`
-  (`context_assistant/core.py`) sirve exactamente un `knowledge_dir`.
+- **Metis no corre como servidor (`docs/adr/0025`).** No hay proceso, no hay
+  `project_id` que resolver en runtime, no hay logica de multi-tenant que agregar en
+  ningun lado. Cada operacion (CLI o skill) recibe su `knowledge_dir` explicito como
+  argumento, siempre.
 - **La maquina de estados es dato**, no logica de python. Vive en
   `schemas/entry-state-machine.json`, se lee con `lib/state_machine.py`. Agregar
   una transicion nueva es editar ese JSON, nunca un `if` nuevo en
@@ -51,13 +51,12 @@ construccion de Fase 0-5.
 ## Gotchas operativos
 
 - **Nunca correr nada de escritura contra `fixtures/contextbase/` real.** Todos los
-  tests que escriben (`test-write-agent.py`, `test-ingestion.py`,
-  `test-api-server.py`, `test-mcp-write-protocol.py`) arman un Context Base
-  descartable en un directorio temporal via `scripts/contextbase-install.sh` + 
-  `git init` sin remote. `context_assistant/mcp_server.py` y `api_server.py` se
-  niegan a escribir contra el fixture de ejemplo por default
-  (`{"error": "writes_disabled"}`) -- es a proposito (`docs/adr/0006`), nunca "un
-  bug a arreglar" pasando `--knowledge-dir` al fixture real.
+  tests que escriben (`test-write-agent.py`, `test-ingestion.py`) arman un Context
+  Base descartable en un directorio temporal via `scripts/contextbase-install.sh` +
+  `git init` sin remote. `lib/propose_cli.py`/`scripts/propose.sh` (`docs/adr/0025`)
+  exigen `--knowledge-dir` siempre, sin ningun default que caiga sobre el fixture de
+  este repo -- a proposito (mismo espiritu que `docs/adr/0006`), nunca "un bug a
+  arreglar" apuntandolo al fixture real.
 - **PyYAML parsea fechas sin comillas como `datetime.date`.** Si tocas
   `lib/validate_frontmatter.py` o cualquier lugar que lea frontmatter YAML,
   revisa `_stringify_dates` -- sin eso, la validacion contra JSON Schema falla
@@ -66,19 +65,17 @@ construccion de Fase 0-5.
   (`Metis Write Agent <write-agent@metis.local>`, `adapters/git_provider.py`),
   via `git -c user.name=... -c user.email=... commit` -- nunca escribiendo
   `git config` (ni local ni global) al Context Base del cliente.
-- **El indice se reconstruye en cada llamada**, sin cache
-  (`context_assistant/core.py::Deployment._current_index`). Es intencional para
-  el volumen actual -- si se agrega cache alguna vez, tiene que invalidar de forma
-  que nunca sirva una respuesta mas vieja que el HEAD real del repo (rompe el
-  principio de "derivado, reconstruible").
-- **Los dos transportes (MCP, API REST) nunca reimplementan logica.** Ambos llaman
-  a `context_assistant/core.py::Deployment`. Si estas por agregar algo que solo
-  existe en un transporte y no en el otro, es una señal de que deberia ir en
-  `core.py` (seccion 5.2: "no hay cuatro implementaciones, hay una logica y cuatro
-  transportes").
-- **El transporte REST usa `http.server` de la stdlib a proposito** (cero
-  dependencias nuevas). No cambiar a un framework (Flask/FastAPI/etc.) sin un ADR
-  que lo justifique.
+- **El indice se reconstruye en cada llamada**, sin cache (`lib/index.py::build_index`,
+  invocado fresco por cada CLI/skill). Es intencional para el volumen actual -- si se
+  agrega cache alguna vez, tiene que invalidar de forma que nunca sirva una respuesta
+  mas vieja que el HEAD real del repo (rompe el principio de "derivado, reconstruible").
+- **No hay transporte que mantener consistente (`docs/adr/0025`).** Cada operacion
+  es un CLI independiente (`lib/index.py`, `lib/audit_gaps_cli.py`,
+  `lib/propose_cli.py`, `lib/ingest_capture_cli.py`, `lib/run_ingestion_cli.py`) --
+  no hay una capa `core.py` que coordine transportes porque no hay transportes. Si
+  estas por agregar una operacion nueva, dale su propio CLI siguiendo el mismo
+  patron (argparse, `--knowledge-dir` explicito, JSON a stdout), no la escondas
+  dentro de otro archivo.
 - **El indice lexical de `lib/index.py` (TF-IDF) no sirve para matchear un id
   exacto contra contenido libre.** Un id como `REQ-0004` tokeniza a
   `["req", "0004"]` -- el token `"req"` por si solo matchea cualquier entrada que
@@ -86,10 +83,10 @@ construccion de Fase 0-5.
   pego con esto (ver `docs/adr/0019`) y lo resolvio con busqueda de substring
   literal sobre el archivo completo en vez de `lib/index.py::search`. Si necesitas
   matchear un identificador especifico contra texto libre en algun lugar nuevo,
-  usar substring, no el indice. (Nota 2026-09-10: `docs/adr/0021` propone reemplazar el indice
-  lexical por embeddings -- cuando eso se implemente, este gotcha especifico deja de aplicar a
-  `search_knowledge`, pero el criterio de fondo -- substring exacto para matchear un id
-  especifico contra texto libre -- sigue valiendo para cualquier lookup por id.)
+  usar substring, no el indice. No hay motor de embeddings que resuelva esto por
+  otro lado (`docs/adr/0021` se probo e implemento, pero se revirtio con
+  `docs/adr/0025` -- si el matching lexical no alcanza, es la sesion de Claude que
+  esta operando Metis la que tiene que leer y entender, no un indice vectorial).
 - **`image_file.py` depende del binario `tesseract` instalado en el sistema, no
   solo de la libreria `pytesseract`.** Si el binario no esta (`gh`/`git` son
   ejemplos de dependencias externas similares en otros conectores), OCR levanta
@@ -102,29 +99,6 @@ construccion de Fase 0-5.
   `fixtures/ingestion/*.docx`/`.pdf`/`.xlsx`/`.png` comiteados. Mismo criterio que
   ya usa `tests/test-audit.py` con un repo de codigo descartable: mas simple y mas
   explicito que revisar un binario en un diff de PR.
-
-- **Toda operacion que use el motor de IA (`docs/adr/0021`/`0022`, implementada) tiene que
-  declarar `deterministic: false` y nunca proponer un resultado sin evidencia puntual
-  (archivo/linea/commit).** Ver `adapters/llm/CONTRACT.md`, reglas 1 y 2 -- esto es MAS estricto
-  que el resto de las reglas de evidencia del proyecto, no menos, porque el riesgo de
-  alucinacion de un LLM leyendo codigo es mayor que el de un grep o un indice lexical. La regla
-  la hace cumplir el adapter mismo (`adapters/llm/openai_protocol.py::_parse_verdict`) ANTES de
-  devolver el resultado -- `lib/evaluate.py` no vuelve a validarla, confia en el contrato.
-- **El protocolo de wire del motor de IA es "estilo OpenAI" (`POST /embeddings`,
-  `POST /chat/completions`), no un SDK por proveedor.** Es el unico formato mainstream que cubre
-  embeddings Y generacion bajo la misma credencial -- lo hablan de forma nativa u
-  OpenAI-compatible tanto OpenAI (modo `external`, default) como los motores self-hosted
-  habituales (vLLM, Ollama, LM Studio). Un proveedor que NO hable este protocolo (ej. la Messages
-  API de Anthropic, sin embeddings) necesita su propio modulo nuevo bajo `adapters/llm/` -- ver
-  `adapters/llm/openai_protocol.py` para el razonamiento completo.
-- **`lib/index.py::semantic_search` y el `provider` opcional de `find_related()` en cada
-  conector de tracker reembeben todo el contenido en cada llamada, sin cache.** Mismo principio
-  que el resto del indice ("derivado, reconstruible") pero el costo/latencia real de esto contra
-  un volumen real de Context Base no se midio -- ver `ROADMAP.md`, "Huecos conocidos".
-- **`git grep` (usado por `adapters/code/git_log.py::search_content`, Fase 8) devuelve exit
-  code 1 cuando no hay ningun match -- no es un error.** Solo un exit code > 1 es una falla real
-  (`CodeProviderError`). Mismo gotcha de "un resultado vacio no es una excepcion" que ya aplica
-  al resto de los conectores de lectura en vivo.
 
 - **`linear_issues.py` lee la API key de la variable de entorno `LINEAR_API_KEY`,
   nunca de `.contextbase/config.yaml`** (mismo criterio que `gh` ya autenticado
@@ -167,8 +141,9 @@ la corrida" que ya usa `security_findings`, nunca "aflojar para un caso particul
 ## Donde vive el razonamiento de diseño
 
 `docs/design/spec-tecnica-funcional.md` es la referencia generica -- principios no
-negociables, arquitectura, pipeline de ingesta, contrato de las entradas (MCP/API,
-`docs/adr/0017`), plan de fases. Decisiones estructurales individuales (por que dedup/match de Fase 3
+negociables, arquitectura, pipeline de ingesta, como se ejecuta cada operacion sin
+servidor (CLI/skill + `--knowledge-dir` explicito, `docs/adr/0025`), plan de fases.
+Decisiones estructurales individuales (por que dedup/match de Fase 3
 no toca contradiccion, por que el status de una propuesta de ingesta es siempre
 `proposed`, etc.) tienen cada una su propio archivo en `docs/adr/` -- si una
 decision de diseño en este repo parece no tener motivo, buscar ahi primero.

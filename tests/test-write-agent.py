@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
 Prueba el Write Agent (lib/write_agent.py) de punta a punta contra un Context Base
-descartable (nunca contra fixtures/contextbase ni contra el repo real de este tool --
-ver el AVISO de seguridad en context_assistant/mcp_server.py sobre por que).
+descartable -- nunca contra fixtures/contextbase ni contra el repo real de este tool,
+que es exactamente el motivo por el que `lib/propose_cli.py` (CLI directo del Write
+Agent, docs/adr/0025) exige `--knowledge-dir` siempre, sin ningun default que caiga
+sobre el fixture de este repo.
 
 Criterio de salida de Fase 2 (docs/design/spec-tecnica-funcional.md seccion 10):
 "una persona le dice al asistente 'registra esta decision', el asistente abre un PR

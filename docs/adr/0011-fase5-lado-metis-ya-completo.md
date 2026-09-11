@@ -1,7 +1,7 @@
 # ADR 0011 -- Fase 5: el lado de Metis del contrato de frontera ya esta completo
 
 Fecha: 2026-09-09
-Estado: aceptada
+Estado: aceptada (el mecanismo de integracion con Dedalo que describe -- Investigator llamando al MCP server de Metis -- queda desactualizado por `docs/adr/0025`: consumo directo del repo de Context Base via skill, no MCP; la decision de fondo -- no tocar `talosprd`/`talos` sin pedido explicito -- sigue vigente. La parte de Talos, seccion 2.2, ya describia lectura directa de archivo y no cambia.)
 
 ## Contexto
 

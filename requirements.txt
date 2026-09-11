@@ -1,8 +1,8 @@
-# Dependencias de lib/ y context_assistant/ (Fase 0 + Fase 1).
+# Dependencias de lib/ (Fase 0 en adelante). Metis no corre como servidor
+# (docs/adr/0025) -- sin transporte MCP/REST, no hace falta el paquete 'mcp'.
 # Instalar con: pip install -r requirements.txt (o --user si no hay virtualenv)
 pyyaml>=6.0
 jsonschema>=3.2
-mcp>=2.0
 
 # Conectores de ingesta de documentos (docs/adr/0015, Fases A-D). Cada dependencia
 # la agrega solo el conector que la necesita -- CSV no necesita nada nuevo (csv de

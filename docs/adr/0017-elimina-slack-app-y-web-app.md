@@ -1,7 +1,7 @@
 # ADR 0017 — Se elimina del alcance del producto el Slack app y la web app: quedan dos entradas, no cuatro (MCP + API REST)
 
 Fecha: 2026-09-09
-Estado: aceptada
+Estado: superseded by ADR-0025
 
 ## Contexto
 

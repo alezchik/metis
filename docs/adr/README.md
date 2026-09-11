@@ -60,3 +60,4 @@ nada mas, a `superseded by ADR-NNNN`.
 | [0022](0022-evaluate-implementation-via-llm.md) | Operacion nueva evaluate_implementation: evaluar codigo via LLM bajo demanda, con evidencia obligatoria |
 | [0023](0023-superficie-red-saliente-proveedor-ia.md) | Metis gana superficie de red saliente hacia un proveedor de IA (o modelo local) |
 | [0024](0024-configuracion-dual-llm-externo-o-interno.md) | Configuracion dual del motor de IA: proveedor externo o modelo servido internamente |
+| [0025](0025-metis-sin-servidor-sesion-de-claude-como-motor.md) | Metis sin servidor: tres repos, el procesamiento lo da la sesion de Claude del usuario -- supersede a 0017 y a 0021-0024 |

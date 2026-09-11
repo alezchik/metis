@@ -28,10 +28,10 @@ tambien `skills/metis-ingest-meeting/SKILL.md` entero, en particular su seccion
    commitea (ver `.gitignore` de `scripts/contextbase-install.sh`). Si aparece en
    tu diff, algo esta mal configurado localmente, no algo para forzar a agregar.
 3. **Python 3.10+, sin dependencias nuevas sin justificarlas.** `requirements.txt`
-   es deliberadamente chico (`pyyaml`, `jsonschema`, `mcp`) -- el transporte REST
-   usa `http.server` de la stdlib a proposito en vez de un framework. Si tu cambio
-   necesita una dependencia nueva, decilo en la descripcion del PR y por que no
-   alcanza con lo que ya hay.
+   es deliberadamente chico (`pyyaml`, `jsonschema`) -- Metis no corre como
+   servidor (`docs/adr/0025`), asi que no hay transporte ni framework que
+   justificar. Si tu cambio necesita una dependencia nueva, decilo en la
+   descripcion del PR y por que no alcanza con lo que ya hay.
 
 ## Cuando tu cambio necesita un ADR
 
@@ -59,8 +59,8 @@ Si toca alguna de estas cosas, agregar uno bajo `docs/adr/` (ver
 - agregar o cambiar un mecanismo de bloqueo por revision humana (el patron
   `*_findings`/`*_review_required` de la seccion 7 -- `security_findings`,
   `sensitive_content_findings`), o decidir donde vive de verdad y con que control
-  de acceso un store propio de Context Assistant (nunca en git) -- ver
-  `docs/adr/0014`/`docs/adr/0018` como ejemplo.
+  de acceso el store de capturas crudas (nunca en git) -- ver `docs/adr/0014`/
+  `docs/adr/0018` como ejemplo.
 
 Un bug fix, un conector de ingesta nuevo que sigue el patron ya existente
 (`adapters/ingestion/CONTRACT.md`), o una aclaracion de documentacion no necesitan
@@ -114,21 +114,6 @@ un archivo local para poder probarse hermeticamente), documentar en el PR por qu
 se agrega cobertura de test para el (mismo motivo que `github_issues.py`: pegaria
 contra la fuente real, o dependeria de que una credencial este configurada en el
 entorno de CI).
-
-## Agregar un modo/proveedor nuevo al motor de IA
-
-Familia distinta de los conectores de arriba (`adapters/llm/CONTRACT.md`, docs/adr/0021/0022/
-0023/0024): no trae contenido para destilar ni consulta estado de un sistema externo -- da
-`embed(text)`/`evaluate(prompt, context)` para busqueda semantica y evaluate_implementation.
-`external.py`/`self_hosted.py` ya cubren cualquier proveedor que hable el protocolo "estilo
-OpenAI" (`adapters/llm/openai_protocol.py`) con solo cambiar `llm.endpoint` en
-`.contextbase/config.yaml` -- no hace falta un modulo nuevo para eso. Un modulo nuevo solo hace
-falta para un proveedor que hable un protocolo DISTINTO (ej. la Messages API de Anthropic, sin
-embeddings): mismo contrato (`embed`/`evaluate`), misma regla de evidencia obligatoria (regla 1
--- un `verdict` sin evidencia puntual se convierte en `inconclusive` ANTES de salir del adapter,
-nunca se delega esa validacion a quien llama), y se agrega la rama correspondiente en
-`lib/llm_config.py::build_llm_provider` -- sin tocar `context_assistant/core.py`,
-`lib/index.py` ni `lib/evaluate.py` (el punto de la interfaz comun).
 
 ## Agregar un tipo de entrada nuevo (mas alla de decision/requirement/risk)
 

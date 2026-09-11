@@ -46,11 +46,9 @@ if str(_REPO_ROOT) not in sys.path:
 import yaml  # noqa: E402
 
 from adapters.code import git_log  # noqa: E402
-from adapters.llm.errors import LLMConfigError, LLMProviderError  # noqa: E402
 from adapters.tracker import file_tracker, github_issues, linear_issues  # noqa: E402
 from lib.config import find_config_path  # noqa: E402
 from lib.index import build_index  # noqa: E402
-from lib.llm_config import build_llm_provider, load_llm_config  # noqa: E402
 
 DEFAULT_TRACKER_MATCH_SIMILARITY = 0.5
 DEFAULT_CODE_MATCH_SIMILARITY = 0.4
@@ -64,20 +62,15 @@ class AuditError(ValueError):
     en vivo."""
 
 
-def _load_audit_config(
-    knowledge_dir: Path,
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
+def _load_audit_config(knowledge_dir: Path) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Lee las secciones 'tracker'/'code' de .contextbase/config.yaml. A diferencia
     de ingestion.capture_store_dir (que falla fuerte si falta, porque no hay un
     default seguro para donde vive el crudo), aca faltante es un estado valido de
-    degradacion (docs/adr/0016 punto 7) -- devuelve None, None, None si no hay
-    config.yaml o si no trae ninguna de las tres secciones. La tercera, 'llm', es
-    para busqueda semantica de tracker (docs/adr/0021) -- ausente es valido
-    (find_related cae a difflib), malformada relanza LLMConfigError (que
-    audit_gaps atrapa junto con AuditError)."""
+    degradacion (docs/adr/0016 punto 7) -- devuelve None, None si no hay
+    config.yaml o si no trae ninguna de las dos secciones."""
     config_path = find_config_path(knowledge_dir)
     if config_path is None:
-        return None, None, None
+        return None, None
     try:
         config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as exc:
@@ -106,45 +99,15 @@ def _load_audit_config(
     if code_raw.get("repo_path"):
         code_cfg = {"repo_path": code_raw["repo_path"], "branch": code_raw.get("branch")}
 
-    llm_cfg = load_llm_config(knowledge_dir)
-
-    return tracker_cfg, code_cfg, llm_cfg
+    return tracker_cfg, code_cfg
 
 
-def _tracker_find_related_call(
-    tracker_cfg: dict[str, Any], query_hint: str, min_similarity: float, provider: Any | None
-) -> list[dict]:
+def _tracker_find_related(tracker_cfg: dict[str, Any], query_hint: str, min_similarity: float) -> list[dict]:
     if tracker_cfg["provider"] == "file":
-        return file_tracker.find_related(
-            tracker_cfg["tickets_file"], query_hint, min_similarity=min_similarity, provider=provider
-        )
+        return file_tracker.find_related(tracker_cfg["tickets_file"], query_hint, min_similarity=min_similarity)
     if tracker_cfg["provider"] == "linear":
-        return linear_issues.find_related(
-            tracker_cfg["team_key"], query_hint, min_similarity=min_similarity, provider=provider
-        )
-    return github_issues.find_related(
-        tracker_cfg["repo"], query_hint, min_similarity=min_similarity, provider=provider
-    )
-
-
-def _tracker_find_related(
-    tracker_cfg: dict[str, Any], query_hint: str, min_similarity: float, llm_provider: Any | None = None
-) -> list[dict]:
-    """Semantica si se pasa 'llm_provider' (docs/adr/0021), lexical (difflib) si no
-    -- o si la llamada semantica falla en runtime (LLMProviderError: credencial
-    vencida, red caida), en cuyo caso se degrada explicito a lexical PARA ESTA
-    CONSULTA, avisando por stderr -- nunca silencioso, nunca aborta toda la
-    auditoria por un problema de red puntual del motor de IA."""
-    if llm_provider is not None:
-        try:
-            return _tracker_find_related_call(tracker_cfg, query_hint, min_similarity, llm_provider)
-        except LLMProviderError as exc:
-            print(
-                f"AVISO: busqueda semantica de tracker fallo ({exc}) -- degradando a similitud "
-                f"lexical para esta consulta",
-                file=sys.stderr,
-            )
-    return _tracker_find_related_call(tracker_cfg, query_hint, min_similarity, None)
+        return linear_issues.find_related(tracker_cfg["team_key"], query_hint, min_similarity=min_similarity)
+    return github_issues.find_related(tracker_cfg["repo"], query_hint, min_similarity=min_similarity)
 
 
 def _tracker_get_status(tracker_cfg: dict[str, Any], ref: str) -> dict:
@@ -180,7 +143,6 @@ def _audit_one(
     code_cfg: dict[str, Any] | None,
     tracker_match_similarity: float,
     code_match_similarity: float,
-    llm_provider: Any | None = None,
 ) -> dict[str, Any]:
     req_id = req_entry["id"]
     title = req_entry["title"]
@@ -203,7 +165,7 @@ def _audit_one(
             )
 
     if ref is None:
-        candidates = _tracker_find_related(tracker_cfg, title, tracker_match_similarity, llm_provider)
+        candidates = _tracker_find_related(tracker_cfg, title, tracker_match_similarity)
         if candidates:
             best = candidates[0]
             ref = best["ref"]
@@ -330,13 +292,9 @@ def audit_gaps(
     index = build_index(knowledge_dir)
 
     try:
-        tracker_cfg, code_cfg, llm_cfg = _load_audit_config(knowledge_dir)
-    except (AuditError, LLMConfigError) as exc:
+        tracker_cfg, code_cfg = _load_audit_config(knowledge_dir)
+    except AuditError as exc:
         return {"error": "invalid_config", "message": str(exc)}
-
-    # motor de IA opcional (docs/adr/0021/0024) -- ausente es valido, find_related de
-    # tracker cae a similitud lexical (difflib) para toda la auditoria.
-    llm_provider = build_llm_provider(llm_cfg) if llm_cfg is not None else None
 
     if tracker_cfg is None:
         return {
@@ -360,7 +318,7 @@ def audit_gaps(
             }
 
     results = [
-        _audit_one(req, tracker_cfg, code_cfg, tracker_match_similarity, code_match_similarity, llm_provider)
+        _audit_one(req, tracker_cfg, code_cfg, tracker_match_similarity, code_match_similarity)
         for req in requirements
     ]
 
@@ -374,7 +332,6 @@ def audit_gaps(
     return {
         "built_from": index["built_from"],
         "code_configured": code_cfg is not None,
-        "semantic_search": llm_provider is not None,
         "n_requirements_audited": len(results),
         "implementado": buckets["implementado"],
         "con_ticket_sin_implementar": buckets["con_ticket_sin_implementar"],

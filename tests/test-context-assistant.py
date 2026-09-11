@@ -5,9 +5,9 @@ Fase 1, criterio de salida (docs/design/primeros-pasos.md seccion 2 / spec secci
 una pregunta en lenguaje natural devuelve una respuesta correcta con cita verificable,
 contra contenido escrito enteramente a mano.
 
-No prueba el transporte MCP (stdio) linea por linea -- eso se corre a mano con
-scripts/mcp-serve.sh y un cliente MCP real (ver README, seccion Fase 1). Este test
-prueba las mismas funciones que el servidor MCP invoca por debajo.
+Metis no corre como servidor (docs/adr/0025) -- este test prueba directamente las
+mismas funciones que cualquier skill invoca via `python3 lib/index.py ...` (CLI) o
+importando `lib.index` de punta a punta.
 """
 import sys
 from pathlib import Path

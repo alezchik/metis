@@ -43,13 +43,12 @@ punto por punto, así que las repito en vez de asumir que se sobreentienden:
 
 El rol Investigator de Dédalo hoy busca en frío contra repos/tracker/Notion cada vez que arranca una
 iniciativa nueva (jerarquía de evidencia: semántico → archivo puntual → grep, sección 4.3 del plan de
-implementación de Dédalo). Cuando el proyecto en cuestión ya tiene un Metis desplegado,
-**Context Base/Assistant se agrega como la primera fuente que el Investigator consulta**, antes de
-tocar el repo de código:
+implementación de Dédalo). Cuando el proyecto en cuestión tiene un Context Base, **se agrega como la
+primera fuente que el Investigator consulta**, antes de tocar el repo de código:
 
 ```
 Investigator de Dédalo, orden de búsqueda actualizado:
-  1. search_knowledge() contra Metis  ← nuevo, primer paso
+  1. Context Base del proyecto  ← nuevo, primer paso
   2. búsqueda semántica sobre el código (como ya hace hoy)
   3. lectura puntual de archivos concretos
   4. grep/escaneo directo (último recurso)
@@ -61,12 +60,16 @@ primero es más barato y evita la métrica que ambos proyectos quieren mejorar: 
 Preguntas de "cómo está implementado X" siguen resolviéndose mejor contra el código, así que el orden
 de búsqueda existente no se descarta, se le antepone un paso.
 
-**Contrato técnico:** el Investigator llama `search_knowledge(query)` / `get_decision(id)` /
-`get_requirement(id)` vía el MCP server de Metis (sección 8.1 de la especificación técnica),
-exactamente como cualquier otro cliente MCP. Cero código nuevo del lado de Metis para esto — es
-el mismo contrato que ya expone a cualquier IA.
+**Contrato técnico (`docs/adr/0025` -- Metis sin servidor).** No hay ningún MCP server que agregar
+como cliente: la sesión de Dédalo que ejecuta el Investigator invoca directo `lib/index.py` del repo
+Metis contra el `--knowledge-dir` de ese Context Base (`search_knowledge`/`get_decision`/
+`get_requirement`, las mismas operaciones de siempre, ver `README.md`/`CLAUDE.md` de Metis). Cero
+código nuevo del lado de Metis para esto -- es el mismo CLI que ya usa cualquiera que consulte Context
+Base a mano. La unica dependencia nueva del lado de Dédalo es tener el repo Metis clonado (o
+accesible) para poder invocar ese CLI, igual que ya necesita tener acceso al repo de Context Base
+mismo.
 
-**Cuándo NO está disponible:** si el proyecto no tiene Metis desplegado (todavía, o nunca), el
+**Cuándo NO está disponible:** si el proyecto no tiene Context Base (todavía, o nunca), el
 Investigator simplemente no tiene ese paso disponible y sigue con su jerarquía de evidencia actual sin
 degradar nada — la integración es aditiva, no una dependencia dura.
 
@@ -90,9 +93,9 @@ preguntas) quedan en `initiatives/<nombre>/`, gitignoreado, y se descartan — e
 implementación de Dédalo lo dice explícitamente: "sirvió su propósito... no hace falta conservarla".
 
 **Cambio propuesto (Fase 5 de ambos proyectos, no del MVP1 de ninguno de los dos):** al llegar a
-`DONE`, si el proyecto tiene Metis desplegado, Dédalo ofrece un paso opcional — no
+`DONE`, si el proyecto tiene Context Base, Dédalo ofrece un paso opcional — no
 obligatorio, no automático — de **publicar las decisiones materiales de esa iniciativa como propuesta
-en Context Base**, vía `propose_decision()`. No es una escritura nueva inventada: es literalmente tomar
+en Context Base**, vía `propose_decision`. No es una escritura nueva inventada: es literalmente tomar
 lo que ya vive en `decisions.jsonl` de esa iniciativa y ofrecerlo como propuesta a la misma memoria de
 proyecto que el resto del equipo consulta, en vez de dejarlo enterrado en una carpeta gitignoreada que
 nadie vuelve a mirar.
@@ -102,9 +105,12 @@ permanente del proyecto — algunas son detalle de implementación de esa inicia
 persona que aprueba el Gate D de Dédalo (publicar el ticket) puede marcar, decisión por decisión, cuál
 vale la pena promover a Context Base — un checkbox más en un gate que ya existe, no un mecanismo nuevo.
 
-**Contrato técnico:** Dédalo usa `propose_decision(payload)` del MCP server de Metis con el
-mismo payload que ya arma para su propio `decisions.jsonl` — el mapeo de campos es casi 1:1 (decisión,
-razón, quién, evidencia citada), así que no hace falta traducir un schema a otro desde cero.
+**Contrato técnico (`docs/adr/0025` -- Metis sin servidor).** No hay MCP server que invocar: Dédalo
+corre `lib/propose_cli.py`/`scripts/propose.sh` del repo Metis (`decision`, con `--knowledge-dir`
+apuntando al Context Base del proyecto) con el mismo payload que ya arma para su propio
+`decisions.jsonl` — el mapeo de campos es casi 1:1 (decisión, razón, quién, evidencia citada), así
+que no hace falta traducir un schema a otro desde cero. El CLI abre el PR contra Context Base y
+termina; no hay proceso que quede corriendo ni credencial de servicio que gestionar del lado de Metis.
 
 ---
 
@@ -135,8 +141,9 @@ independientemente de si Dédalo/Talos están desplegados para ese proyecto.
 
 ## 5. Qué pasa si el contrato de handoff cambia
 
-Mismo compromiso que ya rige entre Talos y Dédalo: el contrato de esta sección (operaciones MCP,
-formato de `propose_decision`, orden de búsqueda del Investigator) es lo único que debe mantenerse
+Mismo compromiso que ya rige entre Talos y Dédalo: el contrato de esta sección (las operaciones de
+Metis -- hoy CLIs directos, `docs/adr/0025` -- formato de `propose_decision`, orden de búsqueda del
+Investigator) es lo único que debe mantenerse
 estable entre los tres repos. Cualquiera de los tres puede reescribir su implementación interna sin
 avisar a los otros dos, siempre que el contrato no cambie. Si el contrato necesita cambiar, el cambio se
 versiona explícitamente (un campo nuevo opcional es compatible hacia atrás; remover o renombrar un campo

@@ -19,8 +19,6 @@ import json
 import subprocess
 from typing import Any
 
-from adapters.llm.similarity import cosine_similarity
-
 
 class TrackerProviderError(RuntimeError):
     """El tracker no se pudo consultar de una forma que no es 'el ticket no existe'
@@ -39,13 +37,7 @@ def _gh(args: list[str], timeout: int = 20) -> subprocess.CompletedProcess:
         ) from exc
 
 
-def find_related(
-    repo: str, query_hint: str, min_similarity: float = 0.5, limit: int = 50, provider: Any | None = None
-) -> list[dict[str, Any]]:
-    """Similitud de titulo -- lexical por default, semantica si se pasa un
-    'provider' de motor de IA (adapters/llm/CONTRACT.md, docs/adr/0021). Ver
-    file_tracker.py::find_related para el razonamiento completo -- mismo patron
-    aca, el contrato no cambia."""
+def find_related(repo: str, query_hint: str, min_similarity: float = 0.5, limit: int = 50) -> list[dict[str, Any]]:
     out = _gh(["issue", "list", "--repo", repo, "--state", "all", "--limit", str(limit), "--json", "number,title,state,url"])
     if out.returncode != 0:
         raise TrackerProviderError(
@@ -54,13 +46,9 @@ def find_related(
     issues = json.loads(out.stdout or "[]")
     hits = []
     needle = (query_hint or "").lower().strip()
-    query_vec = provider.embed(needle) if provider is not None else None
     for issue in issues:
         title = (issue.get("title") or "").lower().strip()
-        if provider is not None:
-            ratio = cosine_similarity(query_vec, provider.embed(title))
-        else:
-            ratio = difflib.SequenceMatcher(None, needle, title).ratio()
+        ratio = difflib.SequenceMatcher(None, needle, title).ratio()
         if ratio >= min_similarity:
             hits.append(
                 {

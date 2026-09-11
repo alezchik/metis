@@ -51,11 +51,12 @@ Un `RawCapture` (`adapters/ingestion/CONTRACT.md`):
 }
 ```
 
-Opcionalmente, el `search_knowledge`/`get_decision`/`get_requirement` del MCP server
-(Fase 1) contra el Context Base del proyecto, para chequear si algo que se dice en la
-reunion ya esta documentado -- pero el dedup/match final de todas formas lo hace
-`lib/ingestion.py` de forma deterministica; usar el MCP acá es opcional y solo ayuda
-a no proponer algo obviamente ya cerrado.
+Opcionalmente, `search_knowledge`/`get_decision`/`get_requirement`
+(`lib/index.py`, sin MCP -- `docs/adr/0025`) contra el Context Base del proyecto,
+para chequear si algo que se dice en la reunion ya esta documentado -- pero el
+dedup/match final de todas formas lo hace `lib/ingestion.py` de forma
+deterministica; consultar el indice aca es opcional y solo ayuda a no proponer algo
+obviamente ya cerrado.
 
 ## Salida: contrato exacto
 
