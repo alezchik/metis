@@ -85,8 +85,9 @@ externo/self-hosted --, y una octava operacion `evaluate_implementation`), pero 
 decidio un pivote de arquitectura mas grande (`docs/adr/0025`, ver "Sin servidor" mas abajo) que
 las vuelve innecesarias: la comprension semantica que buscaban resolver con un adaptador de IA
 propio la resuelve directamente la sesion de Claude que ya esta leyendo el Context Base -- no
-hace falta vectorizar nada. El codigo de ambas fases se elimino de este repo; queda como hueco
-abierto escribir la skill que reemplaza a `evaluate_implementation` (ver `ROADMAP.md`).
+hace falta vectorizar nada. El codigo de ambas fases se elimino de este repo; la skill que reemplaza a
+`evaluate_implementation` ya esta escrita (`skills/metis-evaluate-implementation/SKILL.md`,
+`docs/adr/0026`) -- ver mas abajo.
 
 ## Sin servidor (`docs/adr/0025`)
 
@@ -149,7 +150,9 @@ adapters/
     CONTRACT.md            contrato de conectores de codigo (find_related/get_status)
     git_log.py               `git log --grep` sobre un checkout local (Fase 6)
 skills/
-  metis-ingest-meeting/SKILL.md   rol de destilacion (agentico) para reuniones
+  metis-ingest-meeting/SKILL.md          rol de destilacion (agentico) para reuniones
+  metis-evaluate-implementation/SKILL.md  evalua si un requirement sin ticket ya esta
+                                          implementado, leyendo codigo real (docs/adr/0026)
 fixtures/
   contextbase/       un Context Base "de mentira" completo, para probar sin cliente real
   ingestion/         dos transcripciones de ejemplo (una reunion + su seguimiento que
@@ -346,7 +349,7 @@ seccion 1.1).
 Decisiones de implementacion (que tracker primero, el enum `source` nuevo, como leer codigo)
 en `docs/adr/0019`.
 
-## Evaluar si un requirement sin ticket ya esta implementado (skill pendiente, `docs/adr/0025`)
+## Evaluar si un requirement sin ticket ya esta implementado (`skills/metis-evaluate-implementation/SKILL.md`, `docs/adr/0026`)
 
 `evaluate_implementation(requirement_id)` existio brevemente como operacion de codigo (Fase 8,
 `docs/adr/0022`, un LLM llamado via `adapters/llm/`) y se elimino en el mismo pivote que saco el
@@ -354,8 +357,11 @@ servidor (`docs/adr/0025`): no hace falta un adaptador de IA propio para esto, l
 Claude que este operando el proyecto puede leer el codigo del cliente directamente y evaluar si
 implementa un `requirement` `confirmed` sin ticket -- con la misma exigencia de evidencia
 puntual citada (archivo/linea/commit) que ya forzaba el adapter, nunca un veredicto sin
-respaldo. La skill que guie ese flujo todavia no esta escrita -- ver "Huecos conocidos" en
-`ROADMAP.md`.
+respaldo. `docs/adr/0026` agrega la skill que guia ese flujo: fallback puntual de `audit_gaps`
+(nunca en bulk), a diferencia de `metis-ingest-meeting` corre con acceso de lectura completo al
+repo de codigo del cliente (Read/Grep/Bash/git), y cuando el veredicto lo amerita propone -- nunca
+escribe directo -- agregar una cita `evidence` (`source: "code"`) via `scripts/propose.sh ... update`.
+Cero codigo nuevo en `lib/`/`adapters/`.
 
 ## Correr los tests de este repo
 

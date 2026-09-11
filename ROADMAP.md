@@ -89,13 +89,6 @@
 
 ## Huecos conocidos (no bloqueantes)
 
-- **No hay skill/CLI todavia que reemplace `evaluate_implementation`.** El motor de
-  IA que lo implementaba (`docs/adr/0021`-`0024`) se revirtio con el pivot a
-  "Metis sin servidor" (`docs/adr/0025`) -- ver la seccion "Revertido" mas abajo.
-  El caso que resolvia (confirmar que un requirement sin ticket ya esta
-  implementado, sin depender de un match lexical/de ticket) sigue sin cubrir; la
-  idea es resolverlo como una skill que la propia sesion de Claude ejecuta
-  leyendo codigo directo, en vez de un adapter con su propio proveedor de IA.
 - **Umbral de confianza/relevancia sin validar contra uso real.**
   `ingestion.confidence_threshold` arranca en `0.6` (default conservador,
   `scripts/contextbase-install.sh`), pero ningun valor se probo todavia contra
@@ -181,8 +174,22 @@ el modo `semantic_search` de `lib/index.py` y el parametro `provider` de `find_r
 `adapters/code/git_log.py::search_content`, y los tests que los cubrian
 (`test-llm-engine.*`, `test-semantic-search.*`, `test-evaluate-implementation.*`). El caso que
 resolvia `evaluate_implementation` (confirmar que un requirement sin ticket ya esta
-implementado) sigue sin cubrir -- ver "Huecos conocidos" arriba, donde queda anotado como
-skill pendiente en vez de adapter.
+implementado) se resolvio como skill en vez de adapter -- ver "Resuelto: skill que reemplaza
+`evaluate_implementation` (`docs/adr/0026`)" mas abajo.
+
+## Resuelto: skill que reemplaza `evaluate_implementation` (`docs/adr/0026`)
+
+`docs/adr/0025` habia revertido el motor de IA (`docs/adr/0021`-`0024`, ver "Revertido" arriba)
+dejando explicito que el caso que resolvia `evaluate_implementation` -- confirmar que un
+`requirement` `confirmed` sin ticket ya esta implementado, sin depender de un match lexical/de
+ticket -- seguia sin cubrir. `docs/adr/0026` lo cierra: `skills/metis-evaluate-implementation/SKILL.md`,
+sin codigo nuevo en `lib/`/`adapters/`. A diferencia de `metis-ingest-meeting` (aislada, sin
+herramientas), esta skill la corre la sesion con acceso de lectura completo al repo de codigo del
+cliente -- exige evidencia puntual (archivo/linea, opcionalmente commit) para cualquier veredicto,
+se marca siempre `deterministic: false`, y cuando corresponde propone (nunca escribe directo, via
+`scripts/propose.sh ... update`) agregar una cita `evidence` con `source: "code"` (ya existia en
+el enum, sin cambio de schema) a la entrada evaluada. Fallback puntual de `audit_gaps`, nunca un
+reemplazo ni algo para correr en bulk sobre el backlog.
 
 ## Proximo hito: un piloto real
 

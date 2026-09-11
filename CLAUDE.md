@@ -100,6 +100,14 @@ construccion de Fase 0-5.
   ya usa `tests/test-audit.py` con un repo de codigo descartable: mas simple y mas
   explicito que revisar un binario en un diff de PR.
 
+- **`lib/write_agent.py::propose_update` mergea el `patch` a nivel de campo completo, no
+  DENTRO de cada campo** (`{**frontmatter, **patch}`). Si tu `patch` trae `evidence` (o
+  cualquier otro campo de tipo lista/dict), ese valor reemplaza al anterior entero -- no se
+  le agrega un item. Cualquier flujo que quiera "sumar" una cita nueva a un campo existente
+  (ver `skills/metis-evaluate-implementation/SKILL.md`, que suma una cita `evidence` con
+  `source: "code"`) tiene que traer siempre el valor completo (lo existente + lo nuevo, leido
+  primero via `lib/index.py get`), nunca solo el item nuevo, o la propuesta borra sin querer
+  lo que ya habia.
 - **`linear_issues.py` lee la API key de la variable de entorno `LINEAR_API_KEY`,
   nunca de `.contextbase/config.yaml`** (mismo criterio que `gh` ya autenticado
   para `github_issues.py`/`git_provider.py`). Y a diferencia de un token de `gh`

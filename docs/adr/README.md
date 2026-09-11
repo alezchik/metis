@@ -61,3 +61,4 @@ nada mas, a `superseded by ADR-NNNN`.
 | [0023](0023-superficie-red-saliente-proveedor-ia.md) | Metis gana superficie de red saliente hacia un proveedor de IA (o modelo local) |
 | [0024](0024-configuracion-dual-llm-externo-o-interno.md) | Configuracion dual del motor de IA: proveedor externo o modelo servido internamente |
 | [0025](0025-metis-sin-servidor-sesion-de-claude-como-motor.md) | Metis sin servidor: tres repos, el procesamiento lo da la sesion de Claude del usuario -- supersede a 0017 y a 0021-0024 |
+| [0026](0026-skill-evaluate-implementation-cierra-hueco-0025.md) | Skill `metis-evaluate-implementation` cierra el hueco de evidencia/juicio de codigo dejado por ADR-0025 |
