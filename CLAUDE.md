@@ -108,6 +108,14 @@ construccion de Fase 0-5.
   `source: "code"`) tiene que traer siempre el valor completo (lo existente + lo nuevo, leido
   primero via `lib/index.py get`), nunca solo el item nuevo, o la propuesta borra sin querer
   lo que ya habia.
+- **No todos los tipos de `propose_new_entry` usan el mismo esquema de id ni la misma
+  exigencia de evidencia** (`docs/adr/0027`). `decision`/`requirement`/`risk` usan un
+  contador secuencial (`PREFIJO-NNNN`, `_next_id`) y siempre exigen `evidence`/`confidence`.
+  `system`/`glossary-term` (`SLUG_ID_TYPES` en `lib/write_agent.py`) usan un id "nombrado"
+  (`PREFIJO-slug(nombre)`, `_next_slug_id`) -- son entidades con nombre propio, no una cola de
+  propuestas -- y `glossary-term` es el UNICO tipo donde `evidence`/`confidence` no son
+  obligatorios (asi lo define su propio schema, `docs/adr/0001`). Si agregas logica nueva en
+  `propose_new_entry` que asuma "todos los tipos son iguales", vas a romper alguno de los dos.
 - **`linear_issues.py` lee la API key de la variable de entorno `LINEAR_API_KEY`,
   nunca de `.contextbase/config.yaml`** (mismo criterio que `gh` ya autenticado
   para `github_issues.py`/`git_provider.py`). Y a diferencia de un token de `gh`

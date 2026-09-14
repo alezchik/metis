@@ -191,6 +191,18 @@ se marca siempre `deterministic: false`, y cuando corresponde propone (nunca esc
 el enum, sin cambio de schema) a la entrada evaluada. Fallback puntual de `audit_gaps`, nunca un
 reemplazo ni algo para correr en bulk sobre el backlog.
 
+## Resuelto: `propose_new_entry` cubre `system`/`glossary-term`; CLI expone `requirement`/`risk` (`docs/adr/0027`)
+
+`CONTRIBUTING.md` marcaba explicitamente como pendiente que solo `decision`/`requirement`/
+`risk` tuvieran flujo de propuesta, y que `lib/propose_cli.py`/`scripts/propose.sh` nunca
+hubieran expuesto un subcomando directo para `requirement`/`risk` (pese a que
+`propose_new_entry` ya los soportaba desde Fase 3). `docs/adr/0027` cierra ambos: subcomandos
+`requirement`/`risk`/`system`/`glossary-term` nuevos en el CLI, y `propose_new_entry` extendido
+para reconocer `system`/`glossary-term` -- con id "nombrado" (`SYS-slug`/`TERM-slug`, no un
+contador) y, solo para `glossary-term`, `evidence`/`confidence` opcionales (asi lo define su
+propio schema desde `docs/adr/0001`). `meeting` sigue siendo el unico tipo que no se propone
+"en frio" -- se propone via el pipeline de ingesta, por diseño.
+
 ## Proximo hito: un piloto real
 
 Todo lo de arriba se valido contra `fixtures/` -- un Context Base de mentira, una

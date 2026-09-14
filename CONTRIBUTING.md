@@ -118,14 +118,26 @@ se agrega cobertura de test para el (mismo motivo que `github_issues.py`: pegari
 contra la fuente real, o dependeria de que una credencial este configurada en el
 entorno de CI).
 
-## Agregar un tipo de entrada nuevo (mas alla de decision/requirement/risk)
+## Agregar un tipo de entrada nuevo (mas alla de los cinco que ya se proponen)
 
-Hoy solo `decision`, `requirement` y `risk` tienen flujo de propuesta (via
-`lib/write_agent.py::propose_new_entry`). `system`, `meeting` y `glossary-term`
-tienen schema y se indexan, pero no se proponen todavia via ingesta ni
-conversacionalmente. Si vas a agregar eso, extender `propose_new_entry` (nunca
-duplicar su logica en una funcion nueva) y agregar el tipo a
-`ID_PREFIXES`/`TYPE_SUBDIR` en `lib/write_agent.py`.
+`decision`, `requirement`, `risk`, `system` y `glossary-term` tienen flujo de
+propuesta completo via `lib/write_agent.py::propose_new_entry` (con subcomando
+propio en `scripts/propose.sh`/`lib/propose_cli.py`: `decision`, `requirement`,
+`risk`, `system`, `glossary-term`). Unica asimetria a proposito: `system`/
+`glossary-term` usan un id "nombrado" (`PREFIJO-slug(nombre)`, ver `SLUG_ID_TYPES`
+en `lib/write_agent.py`) en vez del contador secuencial `PREFIJO-NNNN` de los otros
+tres -- son entidades con nombre propio, no una cola de propuestas -- y
+`glossary-term` es el unico tipo donde `evidence`/`confidence` no son obligatorios
+(asi lo define `glossary-term.schema.json`, ver `REQUIRES_EVIDENCE_CONFIDENCE`).
+
+`meeting` es el unico tipo que queda fuera de `propose_new_entry` a proposito: se
+propone via el pipeline de ingesta (`lib/ingestion.py`/`scripts/ingest-capture.sh` +
+`scripts/run-ingestion-pipeline.sh`), no "en frio" como los otros cinco. Si en algun
+momento hace falta un sexto tipo de entrada nuevo (mas alla de los seis que ya
+existen), extender `propose_new_entry` (nunca duplicar su logica en una funcion
+nueva) y agregar el tipo a `ID_PREFIXES`/`TYPE_SUBDIR` (y a `SLUG_ID_TYPES`/
+`NAME_FIELD`/`REQUIRES_EVIDENCE_CONFIDENCE` si su id no es secuencial o su schema no
+exige evidence/confidence) en `lib/write_agent.py`.
 
 ## Editar el rol de destilacion
 

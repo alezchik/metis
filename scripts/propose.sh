@@ -6,6 +6,10 @@
 #
 # Uso:
 #   scripts/propose.sh --knowledge-dir /ruta/knowledge --payload payload.json decision
+#   scripts/propose.sh --knowledge-dir /ruta/knowledge --payload payload.json requirement
+#   scripts/propose.sh --knowledge-dir /ruta/knowledge --payload payload.json risk
+#   scripts/propose.sh --knowledge-dir /ruta/knowledge --payload payload.json system
+#   scripts/propose.sh --knowledge-dir /ruta/knowledge --payload payload.json glossary-term
 #   scripts/propose.sh --knowledge-dir /ruta/knowledge --payload patch.json update --id DEC-0001
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

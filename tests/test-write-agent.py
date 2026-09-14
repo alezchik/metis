@@ -14,6 +14,7 @@ localmente con git de verdad) es lo que este test ejercita.
 """
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -24,7 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from lib.index import build_index, get_by_id  # noqa: E402
-from lib.write_agent import WriteAgentError, propose_decision, propose_update  # noqa: E402
+from lib.write_agent import WriteAgentError, propose_decision, propose_new_entry, propose_update  # noqa: E402
 
 failures: list[str] = []
 
@@ -192,6 +193,146 @@ def main() -> int:
             check("propose_update sobre un id inexistente falla", False)
         except WriteAgentError as exc:
             check("propose_update sobre un id inexistente falla", "no existe" in str(exc))
+
+        # --- propose_new_entry("requirement", ...): mismo camino que ya usaba ingesta (Fase 3),
+        # ahora tambien invocable "en frio" (docs/adr/0027) ---
+        req_receipt = propose_new_entry(
+            repo_root, knowledge_dir, "requirement",
+            {
+                "title": "Exportar reportes en CSV",
+                "evidence": [{"source": "manual", "ref": "test-write-agent.py"}],
+                "confidence": "FACT",
+                "requested_by": "augusto@xmartlabs.com",
+            },
+        )
+        check("propose_new_entry('requirement') devuelve un id REQ-0001", req_receipt.get("id") == "REQ-0001")
+        check("el archivo del requirement cae en knowledge/requirements/", "/requirements/" in req_receipt["file"])
+        _merge_branch_locally(repo_root, req_receipt["branch"])  # deja la rama base al dia para el siguiente _next_id
+
+        # --- propose_new_entry("risk", ...): exige 'severity' igual que ya exigia el pipeline de ingesta ---
+        try:
+            propose_new_entry(
+                repo_root, knowledge_dir, "risk",
+                {"title": "Riesgo sin severidad", "evidence": [{"source": "manual", "ref": "x"}], "confidence": "INFERENCE", "requested_by": "x"},
+            )
+            check("propose_new_entry('risk') sin severity se rechaza", False)
+        except WriteAgentError as exc:
+            check("propose_new_entry('risk') sin severity se rechaza", "severity" in str(exc))
+        risk_receipt = propose_new_entry(
+            repo_root, knowledge_dir, "risk",
+            {
+                "title": "Migracion de datos legado puede perder registros",
+                "evidence": [{"source": "manual", "ref": "test-write-agent.py"}],
+                "confidence": "INFERENCE",
+                "requested_by": "augusto@xmartlabs.com",
+                "severity": "high",
+            },
+        )
+        check("propose_new_entry('risk') devuelve un id RISK-0001", risk_receipt.get("id") == "RISK-0001")
+        _merge_branch_locally(repo_root, risk_receipt["branch"])
+
+        # --- propose_new_entry("system", ...): id 'nombrado' (SYS-slug), no secuencial (docs/adr/0027) ---
+        sys_receipt = propose_new_entry(
+            repo_root, knowledge_dir, "system",
+            {
+                "title": "Penguin",
+                "evidence": [{"source": "manual", "ref": "test-write-agent.py"}],
+                "confidence": "FACT",
+                "requested_by": "augusto@xmartlabs.com",
+                "owner": ["augusto@xmartlabs.com"],
+            },
+        )
+        check("propose_new_entry('system') genera un id con slug del titulo (SYS-penguin)", sys_receipt.get("id") == "SYS-penguin")
+        check("el nombre de archivo no duplica el slug (no 'SYS-penguin-penguin.md')", sys_receipt["file"].endswith("/systems/penguin.md"))
+        # _next_slug_id detecta colisiones leyendo el working tree de la rama base -- hay que
+        # mergear el primer 'Penguin' antes de proponer el segundo, o ambos generarian el mismo
+        # id (SYS-penguin) y chocarian al crear la misma rama 'metis/SYS-penguin' dos veces.
+        _merge_branch_locally(repo_root, sys_receipt["branch"])
+
+        # --- un segundo 'system' con el mismo titulo desambigua el slug (-2), nunca pisa el primero ---
+        sys_receipt_dup = propose_new_entry(
+            repo_root, knowledge_dir, "system",
+            {
+                "title": "Penguin",
+                "evidence": [{"source": "manual", "ref": "test-write-agent.py"}],
+                "confidence": "FACT",
+                "requested_by": "augusto@xmartlabs.com",
+            },
+        )
+        check("un slug de 'system' repetido se desambigua con -2 en vez de pisar el primero", sys_receipt_dup.get("id") == "SYS-penguin-2")
+        _merge_branch_locally(repo_root, sys_receipt_dup["branch"])
+
+        # --- propose_new_entry("system", ...) SIN evidence se rechaza -- a diferencia de glossary-term ---
+        try:
+            propose_new_entry(
+                repo_root, knowledge_dir, "system",
+                {"title": "Sistema sin evidencia", "confidence": "FACT", "requested_by": "x"},
+            )
+            check("propose_new_entry('system') sin evidence se rechaza", False)
+        except WriteAgentError as exc:
+            check("propose_new_entry('system') sin evidence se rechaza", "evidence" in str(exc))
+
+        # --- propose_new_entry("glossary-term", ...): usa 'term' en vez de 'title', y NO exige
+        # evidence/confidence (a diferencia de los otros cuatro tipos -- glossary-term.schema.json
+        # no los pide en 'required', docs/adr/0027) ---
+        term_receipt = propose_new_entry(
+            repo_root, knowledge_dir, "glossary-term",
+            {
+                "term": "MVP",
+                "aliases": ["Minimum Viable Product", "producto minimo viable"],
+                "requested_by": "augusto@xmartlabs.com",
+            },
+        )
+        check("propose_new_entry('glossary-term') funciona sin 'evidence' ni 'confidence'", term_receipt.get("id") == "TERM-mvp")
+        check("el archivo del termino cae en knowledge/glossary/", term_receipt["file"].endswith("/glossary/mvp.md"))
+        _merge_branch_locally(repo_root, term_receipt["branch"])
+
+        # --- propose_new_entry("glossary-term", ...) sin 'term' se rechaza igual que sin 'title' en los demas tipos ---
+        try:
+            propose_new_entry(repo_root, knowledge_dir, "glossary-term", {"requested_by": "x"})
+            check("propose_new_entry('glossary-term') sin 'term' se rechaza", False)
+        except WriteAgentError as exc:
+            check("propose_new_entry('glossary-term') sin 'term' se rechaza", "term" in str(exc))
+
+        # --- el gap real reportado (docs/adr/0027): scripts/propose.sh/lib/propose_cli.py no
+        # exponian NINGUN subcomando para requirement/risk/system/glossary-term, solo decision/
+        # update -- se prueba el CLI de punta a punta (subprocess real), no solo la funcion Python ---
+        cli_payload = tmp_dir / "cli-requirement-payload.json"
+        cli_payload.write_text(
+            json.dumps({
+                "title": "Soportar SSO para usuarios internos",
+                "evidence": [{"source": "manual", "ref": "test-write-agent.py::cli"}],
+                "confidence": "FACT",
+                "requested_by": "augusto@xmartlabs.com",
+            }),
+            encoding="utf-8",
+        )
+        cli_result = _run(
+            [sys.executable, str(REPO_ROOT / "lib" / "propose_cli.py"),
+             "--knowledge-dir", str(knowledge_dir), "--payload", str(cli_payload), "requirement"],
+            repo_root,
+        )
+        cli_receipt = json.loads(cli_result.stdout)
+        check("scripts/propose.sh (via propose_cli.py) expone el subcomando 'requirement'", cli_receipt.get("id") == "REQ-0002")
+        _merge_branch_locally(repo_root, cli_receipt["branch"])
+
+        cli_payload_sys = tmp_dir / "cli-system-payload.json"
+        cli_payload_sys.write_text(
+            json.dumps({
+                "title": "Gwen",
+                "evidence": [{"source": "manual", "ref": "test-write-agent.py::cli"}],
+                "confidence": "FACT",
+                "requested_by": "augusto@xmartlabs.com",
+            }),
+            encoding="utf-8",
+        )
+        cli_result_sys = _run(
+            [sys.executable, str(REPO_ROOT / "lib" / "propose_cli.py"),
+             "--knowledge-dir", str(knowledge_dir), "--payload", str(cli_payload_sys), "system"],
+            repo_root,
+        )
+        cli_receipt_sys = json.loads(cli_result_sys.stdout)
+        check("scripts/propose.sh (via propose_cli.py) expone el subcomando 'system'", cli_receipt_sys.get("id") == "SYS-gwen")
 
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)

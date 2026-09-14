@@ -369,9 +369,13 @@ def main() -> int:
         check("contradicts_id que no resuelve a una entrada confirmed real no se actua como contradiccion", all(r.get("dedup", {}).get("action") != "contradiction" for r in result8["proposed"]))
         check("queda registrada una nota explicita sobre el contradicts_id invalido (nunca en silencio)", len(result8["notes"]) == 1 and "DEC-9999" in result8["notes"][0])
 
-        # --- propose_new_entry: tipo no soportado se rechaza antes de tocar git ---
+        # --- propose_new_entry: tipo no soportado se rechaza antes de tocar git --
+        # "meeting" es el ejemplo correcto: tiene schema y se indexa, pero deliberadamente
+        # nunca se propone "en frio" via propose_new_entry (se propone via el pipeline de
+        # ingesta, docs/adr/0027) -- "system"/"glossary-term" dejaron de ser un ejemplo valido
+        # de tipo no soportado desde que docs/adr/0027 los agrego a propose_new_entry.
         try:
-            propose_new_entry(repo_root, knowledge_dir, "system", {"title": "x", "evidence": [{"source": "manual", "ref": "x"}], "confidence": "FACT", "requested_by": "x"})
+            propose_new_entry(repo_root, knowledge_dir, "meeting", {"title": "x", "evidence": [{"source": "manual", "ref": "x"}], "confidence": "FACT", "requested_by": "x"})
             check("propose_new_entry rechaza un entry_type no soportado", False)
         except WriteAgentError as exc:
             check("propose_new_entry rechaza un entry_type no soportado", "no soportado" in str(exc))

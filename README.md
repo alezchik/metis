@@ -99,7 +99,7 @@ pensados para que una skill (o una persona) los invoque por Bash:
 |---|---|
 | `search_knowledge`/`get_decision`/`get_requirement`/`list_open_questions` | `python3 lib/index.py search\|get\|list-open-questions ...` |
 | `audit_gaps` | `scripts/audit-gaps.sh` |
-| `propose_decision`/`propose_update` | `scripts/propose.sh` |
+| `propose_decision`/`propose_new_entry`/`propose_update` | `scripts/propose.sh` (subcomandos `decision`\|`requirement`\|`risk`\|`system`\|`glossary-term`\|`update`) |
 | ingesta (reuniones/documentos) | `scripts/ingest-capture.sh` + `scripts/run-ingestion-pipeline.sh` |
 
 Todo lo demas (que la sesion busque semanticamente, que redacte una decision, que evalue si un
@@ -115,7 +115,8 @@ scripts/
   validate-entries.sh      corre el validador contra un knowledge/ (para CI del cliente)
   reindex.sh               reconstruye el indice lexical contra un knowledge/
   audit-gaps.sh            Fase 6: corre audit_gaps y escribe un reporte Markdown a disco
-  propose.sh               Write Agent sin transporte: propose_decision/propose_update (docs/adr/0025)
+  propose.sh               Write Agent sin transporte: decision/requirement/risk/system/
+                           glossary-term/update (docs/adr/0025, docs/adr/0027)
   ingest-capture.sh        paso 1 de ingesta: trae y guarda una captura cruda
   run-ingestion-pipeline.sh paso 2 de ingesta: destilacion -> dedup/match -> propuesta
 lib/
@@ -216,16 +217,27 @@ alcanza (un pedido en un idioma distinto al del contenido, parafraseado distinto
 operando Metis -- una sesion de Claude -- lee el contenido directo y entiende el significado sin
 necesitar un indice vectorial.
 
-## Registrar una decision o actualizar una entrada (Fase 2 -- Write Agent, docs/adr/0025)
+## Registrar una entrada nueva o actualizar una existente (Fase 2 -- Write Agent, docs/adr/0025/0027)
 
 ```bash
 scripts/propose.sh --knowledge-dir /ruta/a/knowledge --payload payload.json decision
+scripts/propose.sh --knowledge-dir /ruta/a/knowledge --payload payload.json requirement
+scripts/propose.sh --knowledge-dir /ruta/a/knowledge --payload payload.json risk
+scripts/propose.sh --knowledge-dir /ruta/a/knowledge --payload payload.json system
+scripts/propose.sh --knowledge-dir /ruta/a/knowledge --payload payload.json glossary-term
 scripts/propose.sh --knowledge-dir /ruta/a/knowledge --payload patch.json update --id DEC-0001
 ```
 
-- `decision`: `payload.json` necesita `title`, `evidence` (lista, minimo 1 cita),
-  `confidence`, `requested_by`; `decided_by` es opcional (si viene, el status por default es
-  `confirmed`, si no `proposed` -- ver `docs/adr/0007`).
+- `decision`/`requirement`/`risk`/`system`: `payload.json` necesita `title`, `evidence` (lista,
+  minimo 1 cita), `confidence`, `requested_by`. Especifico de cada uno: `decision` acepta
+  `decided_by` opcional (si viene, el status por default es `confirmed`, si no `proposed` --
+  ver `docs/adr/0007`); `risk` exige ademas `severity` (sin default neutro); `system` acepta
+  `owner`/`depends_on` opcionales.
+- `glossary-term`: usa `term` en vez de `title`, y es el unico de los cinco donde `evidence`/
+  `confidence` no son obligatorios (asi lo define `glossary-term.schema.json`, `docs/adr/0001`);
+  acepta `aliases` opcional. `system`/`glossary-term` generan un id "nombrado"
+  (`SYS-slug(titulo)`/`TERM-slug(termino)`, ej. `SYS-reporting-service`), no un contador
+  secuencial como los otros tres (`docs/adr/0027`).
 - `update --id <id>`: `payload.json` necesita `patch` (los campos a cambiar, ej.
   `{"status": "superseded", "superseded_by": "DEC-0005"}`), `reason`, `requested_by`. Un cambio
   de `status` se valida contra `schemas/entry-state-machine.json` -- una transicion no declarada

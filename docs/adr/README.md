@@ -67,3 +67,4 @@ patron) -- nunca reescribir el cuerpo del ADR viejo para explicarlo.
 | [0024](0024-configuracion-dual-llm-externo-o-interno.md) | Configuracion dual del motor de IA: proveedor externo o modelo servido internamente |
 | [0025](0025-metis-sin-servidor-sesion-de-claude-como-motor.md) | Metis sin servidor: tres repos, el procesamiento lo da la sesion de Claude del usuario -- supersede a 0017 y a 0021-0024 |
 | [0026](0026-skill-evaluate-implementation-cierra-hueco-0025.md) | Skill `metis-evaluate-implementation` cierra el hueco de evidencia/juicio de codigo dejado por ADR-0025 |
+| [0027](0027-propose-new-entry-system-glossary-term-cli-requirement-risk.md) | `propose_new_entry` cubre `system`/`glossary-term`; CLI de `propose.sh` expone `requirement`/`risk` directamente |

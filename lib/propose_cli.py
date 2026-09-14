@@ -19,12 +19,18 @@ hay riesgo de proponer sin querer contra fixtures/contextbase de este mismo repo
 
 Uso:
   propose_cli.py --knowledge-dir <knowledge/> --payload payload.json decision
+  propose_cli.py --knowledge-dir <knowledge/> --payload payload.json requirement
+  propose_cli.py --knowledge-dir <knowledge/> --payload payload.json risk
+  propose_cli.py --knowledge-dir <knowledge/> --payload payload.json system
+  propose_cli.py --knowledge-dir <knowledge/> --payload payload.json glossary-term
   propose_cli.py --knowledge-dir <knowledge/> --payload patch.json update --id DEC-0001
 
 El payload es JSON leido de un archivo (--payload ruta) o de stdin (--payload -).
-Ver lib/write_agent.py::propose_decision/propose_update para el contrato completo
-de cada payload (title/evidence/confidence/requested_by para decision; patch/reason/
-requested_by para update).
+Ver lib/write_agent.py::propose_new_entry para el contrato completo de cada payload
+por tipo (title/evidence/confidence/requested_by en comun para decision/requirement/
+risk/system; glossary-term usa 'term' en vez de 'title' y es el unico donde
+evidence/confidence no son obligatorios) y propose_update para el de 'update'
+(patch/reason/requested_by).
 
 Sale con status 0 si la propuesta se creo (incluso si el resultado trae
 discrepancias -- eso es contenido, no una falla de este comando), 1 si
@@ -45,6 +51,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from lib.write_agent import (  # noqa: E402
     WriteAgentError,
     propose_decision,
+    propose_new_entry,
     propose_update,
 )
 
@@ -68,6 +75,10 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("decision", help="registra una decision nueva (lib/write_agent.py::propose_decision)")
+    sub.add_parser("requirement", help="registra un requirement nuevo (lib/write_agent.py::propose_new_entry)")
+    sub.add_parser("risk", help="registra un risk nuevo (lib/write_agent.py::propose_new_entry)")
+    sub.add_parser("system", help="registra un system nuevo (lib/write_agent.py::propose_new_entry)")
+    sub.add_parser("glossary-term", help="registra un glossary-term nuevo (lib/write_agent.py::propose_new_entry)")
 
     p_update = sub.add_parser("update", help="propone actualizar una entrada existente (lib/write_agent.py::propose_update)")
     p_update.add_argument("--id", required=True, help="id de la entrada a actualizar (ej. DEC-0001)")
@@ -93,8 +104,12 @@ def main() -> int:
     try:
         if args.command == "decision":
             result = propose_decision(repo_root, knowledge_dir, payload)
-        else:
+        elif args.command == "update":
             result = propose_update(repo_root, knowledge_dir, args.id, payload)
+        else:
+            # requirement/risk/system/glossary-term: el nombre del subcomando es
+            # literalmente el entry_type que espera propose_new_entry.
+            result = propose_new_entry(repo_root, knowledge_dir, args.command, payload)
     except WriteAgentError as exc:
         print(f"ERROR: propuesta invalida: {exc}", file=sys.stderr)
         return 1
