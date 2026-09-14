@@ -48,7 +48,7 @@
     },
     "contradicts_id": {
       "type": ["string", "null"],
-      "description": "Id de una entrada 'confirmed' existente con la que este candidato contradice. Igual que updates_id: dato disponible para Fase 4 (marcar disputed via ingesta), Fase 3 no actua sobre el (docs/adr/0008)."
+      "description": "Id de una entrada 'confirmed' existente con la que este candidato contradice. A diferencia de updates_id, esta activo desde Fase 4 (docs/adr/0009): si resuelve a una entrada confirmed real del mismo tipo, run_pipeline no propone una entrada nueva -- propone marcar esa entrada disputed via propose_update, citando la evidencia nueva."
     }
   },
   "if": { "properties": { "entry_type": { "const": "risk" } } },

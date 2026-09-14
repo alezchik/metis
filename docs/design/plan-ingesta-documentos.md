@@ -74,6 +74,11 @@ que tomar (o confirmar la recomendación de acá).
 
 ### 4.1 Dependencias nuevas
 
+*(Contexto original, ya desactualizado por `docs/adr/0025` -- Metis nunca tuvo un paquete `mcp` en
+`requirements.txt`, y el "transporte REST" que menciona este párrafo se eliminó por completo con el
+pivot a "sin servidor": hoy no hay ningún transporte que mantener. Se deja el texto original sin
+reescribir, mismo criterio que el resto de este documento, y se agrega el bloque "Resuelto" abajo.)*
+
 `requirements.txt` es deliberadamente mínimo hoy (`pyyaml`, `jsonschema`, `mcp`) — el transporte REST
 usa `http.server` de la stdlib a propósito, sin dependencias nuevas sin justificar (`CLAUDE.md`,
 `CONTRIBUTING.md`). Extraer `.docx`/`.pdf`/`.xlsx` en Python normalmente implica: `python-docx`, `pypdf`

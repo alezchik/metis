@@ -25,7 +25,10 @@ Busca tickets cuyo titulo se parezca a `query_hint` (normalmente el titulo de un
 ```
 
 Ordenada por `similarity` descendente. Lista vacia si no hay ningun ticket
-remotamente parecido -- nunca un candidato inventado.
+remotamente parecido -- nunca un candidato inventado. El calculo de `similarity`
+(SequenceMatcher sobre titulo + umbral + orden) es identico en los tres conectores
+de abajo -- vive una unica vez en `adapters/tracker/_similarity.py::rank_by_title_similarity`,
+cada conector solo trae y normaliza sus propios candidatos antes de llamarlo.
 
 ### `get_status(ref)`
 

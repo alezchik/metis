@@ -30,7 +30,12 @@ por que se tomo asi -- esa si.
 Nunca editar un ADR viejo para revertirlo -- misma disciplina de "nunca se edita,
 se propone" que este proyecto ya aplica a sus propias entradas de Context Base
 (seccion 1, principio 2). Escribir uno nuevo, y editar la linea **Estado** del viejo
-nada mas, a `superseded by ADR-NNNN`.
+nada mas -- nunca el cuerpo. El formato minimo es `superseded by ADR-NNNN`; si solo
+una parte de la Decision quedo superseded (el resto sigue vigente) o si un ADR
+posterior resuelve un hueco que este dejaba abierto sin reemplazar la decision
+entera, agregar una frase corta despues aclarando el alcance exacto (ver
+`docs/adr/0002`, `0005`, `0010`, `0011` o `0014` como ejemplos reales de este
+patron) -- nunca reescribir el cuerpo del ADR viejo para explicarlo.
 
 ## Indice
 

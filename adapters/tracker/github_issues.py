@@ -14,10 +14,11 @@ contrato, solo que contra una fuente real.
 """
 from __future__ import annotations
 
-import difflib
 import json
 import subprocess
 from typing import Any
+
+from adapters.tracker._similarity import rank_by_title_similarity
 
 
 class TrackerProviderError(RuntimeError):
@@ -38,29 +39,25 @@ def _gh(args: list[str], timeout: int = 20) -> subprocess.CompletedProcess:
 
 
 def find_related(repo: str, query_hint: str, min_similarity: float = 0.5, limit: int = 50) -> list[dict[str, Any]]:
+    """El ranking en si (SequenceMatcher + umbral + orden) vive en
+    adapters/tracker/_similarity.py, compartido con file_tracker.py/linear_issues.py
+    -- aca solo se trae la lista de issues via `gh` y se normaliza."""
     out = _gh(["issue", "list", "--repo", repo, "--state", "all", "--limit", str(limit), "--json", "number,title,state,url"])
     if out.returncode != 0:
         raise TrackerProviderError(
             f"'gh issue list --repo {repo}' fallo -- {out.stderr.strip() or 'sin autenticar o repo inaccesible'}"
         )
     issues = json.loads(out.stdout or "[]")
-    hits = []
-    needle = (query_hint or "").lower().strip()
-    for issue in issues:
-        title = (issue.get("title") or "").lower().strip()
-        ratio = difflib.SequenceMatcher(None, needle, title).ratio()
-        if ratio >= min_similarity:
-            hits.append(
-                {
-                    "ref": str(issue["number"]),
-                    "title": issue.get("title"),
-                    "url": issue.get("url"),
-                    "state": (issue.get("state") or "").lower(),
-                    "similarity": round(ratio, 4),
-                }
-            )
-    hits.sort(key=lambda h: h["similarity"], reverse=True)
-    return hits
+    candidates = [
+        {
+            "ref": str(issue["number"]),
+            "title": issue.get("title"),
+            "url": issue.get("url"),
+            "state": (issue.get("state") or "").lower(),
+        }
+        for issue in issues
+    ]
+    return rank_by_title_similarity(query_hint, candidates, min_similarity)
 
 
 def get_status(repo: str, ref: str) -> dict[str, Any]:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Indice semantico de Context Base -- derivado, reconstruible enteramente desde el HEAD
+Indice lexical de Context Base -- derivado, reconstruible enteramente desde el HEAD
 del repo. Ver docs/design/spec-tecnica-funcional.md secciones 3, 5.2, 8.1.
 
 MVP de Fase 1: indice lexical (TF-IDF liviano sobre titulo+tags+cuerpo), no embeddings.

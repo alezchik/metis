@@ -21,10 +21,11 @@ porque asi los devuelve `gh`); lib/audit.py compara contra el literal "closed".
 """
 from __future__ import annotations
 
-import difflib
 import json
 from pathlib import Path
 from typing import Any
+
+from adapters.tracker._similarity import rank_by_title_similarity
 
 
 class TrackerProviderError(RuntimeError):
@@ -51,25 +52,20 @@ def find_related(tickets_file: str | Path, query_hint: str, min_similarity: floa
     """Similitud lexical de titulo (mismo mecanismo que
     lib/ingestion.py::classify_candidate usa para dedup/match, docs/adr/0008) --
     ninguna API de tracker real ofrece busqueda semantica gratis, y esto funciona
-    igual sin tener que citar el ticket de antemano."""
+    igual sin tener que citar el ticket de antemano. El ranking en si (SequenceMatcher
+    + umbral + orden) vive en adapters/tracker/_similarity.py, compartido con
+    github_issues.py/linear_issues.py -- aca solo se normalizan los tickets."""
     tickets = _load_tickets(tickets_file)
-    hits = []
-    needle = (query_hint or "").lower().strip()
-    for ticket in tickets:
-        title = (ticket.get("title") or "").lower().strip()
-        ratio = difflib.SequenceMatcher(None, needle, title).ratio()
-        if ratio >= min_similarity:
-            hits.append(
-                {
-                    "ref": str(ticket.get("ref")),
-                    "title": ticket.get("title"),
-                    "url": ticket.get("url"),
-                    "state": ticket.get("state"),
-                    "similarity": round(ratio, 4),
-                }
-            )
-    hits.sort(key=lambda h: h["similarity"], reverse=True)
-    return hits
+    candidates = [
+        {
+            "ref": str(ticket.get("ref")),
+            "title": ticket.get("title"),
+            "url": ticket.get("url"),
+            "state": ticket.get("state"),
+        }
+        for ticket in tickets
+    ]
+    return rank_by_title_similarity(query_hint, candidates, min_similarity)
 
 
 def get_status(tickets_file: str | Path, ref: str) -> dict[str, Any]:

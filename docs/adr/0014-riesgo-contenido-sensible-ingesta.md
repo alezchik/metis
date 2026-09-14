@@ -1,7 +1,7 @@
 # ADR 0014 -- La ingesta de reuniones no corre contra datos reales sin control de contenido sensible
 
 Fecha: 2026-09-09
-Estado: aceptada
+Estado: aceptada -- ambos huecos de la Decision resueltos por `docs/adr/0018`
 
 ## Contexto
 

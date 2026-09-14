@@ -27,11 +27,14 @@ tambien `skills/metis-ingest-meeting/SKILL.md` entero, en particular su seccion
    localmente -- es derivado y reconstruible (`scripts/reindex.sh`), nunca se
    commitea (ver `.gitignore` de `scripts/contextbase-install.sh`). Si aparece en
    tu diff, algo esta mal configurado localmente, no algo para forzar a agregar.
-3. **Python 3.10+, sin dependencias nuevas sin justificarlas.** `requirements.txt`
-   es deliberadamente chico (`pyyaml`, `jsonschema`) -- Metis no corre como
-   servidor (`docs/adr/0025`), asi que no hay transporte ni framework que
-   justificar. Si tu cambio necesita una dependencia nueva, decilo en la
-   descripcion del PR y por que no alcanza con lo que ya hay.
+3. **Python 3.10+, sin dependencias nuevas sin justificarlas.** El nucleo de
+   `lib/` solo necesita `pyyaml`/`jsonschema` -- Metis no corre como servidor
+   (`docs/adr/0025`), asi que no hay transporte ni framework que justificar. Cada
+   conector de ingesta suma, aparte, solo la dependencia puntual que necesita
+   (ver `python-docx`/`pypdf`/`openpyxl`/`pillow`/`pytesseract` en
+   `requirements.txt`, una por conector, `docs/adr/0015`/`0020`). Si tu cambio
+   necesita una dependencia nueva, decilo en la descripcion del PR y por que no
+   alcanza con lo que ya hay.
 
 ## Cuando tu cambio necesita un ADR
 

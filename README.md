@@ -143,6 +143,7 @@ adapters/
     image_file.py            conector de imagenes: OCR puro via pytesseract (docs/adr/0015/0020)
   tracker/
     CONTRACT.md            contrato de conectores de tracker (find_related/get_status)
+    _similarity.py          ranking por similitud de titulo, compartido por los tres conectores
     file_tracker.py         conector de referencia: tickets en un JSON local (Fase 6)
     github_issues.py        conector real via `gh issue` (no ejercitado por los tests)
     linear_issues.py         conector real via API GraphQL de Linear (LINEAR_API_KEY)

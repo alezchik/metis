@@ -35,12 +35,13 @@ respuesta GraphQL trae `errors`), nunca como un resultado silenciosamente vacio.
 """
 from __future__ import annotations
 
-import difflib
 import json
 import os
 import urllib.error
 import urllib.request
 from typing import Any, Callable
+
+from adapters.tracker._similarity import rank_by_title_similarity
 
 _API_URL = "https://api.linear.app/graphql"
 _ENV_VAR = "LINEAR_API_KEY"
@@ -127,8 +128,10 @@ def find_related(
     min_similarity: float = 0.5,
     transport: Callable[[str, dict[str, Any], str], dict[str, Any]] = _default_transport,
 ) -> list[dict[str, Any]]:
-    needle = (query_hint or "").lower().strip()
-    hits: list[dict[str, Any]] = []
+    """El ranking en si (SequenceMatcher + umbral + orden) vive en
+    adapters/tracker/_similarity.py, compartido con file_tracker.py/github_issues.py
+    -- aca solo se pagina el GraphQL de Linear y se normalizan los nodos."""
+    candidates: list[dict[str, Any]] = []
     after = None
     scanned = 0
     while True:
@@ -136,25 +139,20 @@ def find_related(
         issues = data.get("issues") or {}
         nodes = issues.get("nodes") or []
         for node in nodes:
-            title = (node.get("title") or "").lower().strip()
-            ratio = difflib.SequenceMatcher(None, needle, title).ratio()
-            if ratio >= min_similarity:
-                hits.append(
-                    {
-                        "ref": node.get("identifier"),
-                        "title": node.get("title"),
-                        "url": node.get("url"),
-                        "state": ((node.get("state") or {}).get("name") or "").lower(),
-                        "similarity": round(ratio, 4),
-                    }
-                )
+            candidates.append(
+                {
+                    "ref": node.get("identifier"),
+                    "title": node.get("title"),
+                    "url": node.get("url"),
+                    "state": ((node.get("state") or {}).get("name") or "").lower(),
+                }
+            )
         scanned += len(nodes)
         page_info = issues.get("pageInfo") or {}
         if not page_info.get("hasNextPage") or scanned >= _MAX_ISSUES_SCANNED:
             break
         after = page_info.get("endCursor")
-    hits.sort(key=lambda h: h["similarity"], reverse=True)
-    return hits
+    return rank_by_title_similarity(query_hint, candidates, min_similarity)
 
 
 def get_status(
