@@ -39,6 +39,32 @@ def _ensure_clean_worktree(repo_root: Path) -> None:
         )
 
 
+def _branch_exists(repo_root: Path, branch_name: str) -> bool:
+    """True si branch_name ya existe local o remotamente. Usado para que un
+    branch_name derivado de algo que se puede repetir entre corridas (ej. un
+    capture_id de ingesta que se reintenta, docs/adr/0028) nunca choque con
+    'fatal: a branch named ... already exists' -- a diferencia del branch_name
+    de una propuesta conversacional individual, que ya es unico porque deriva de
+    un id recien asignado (_next_id/_next_slug_id en lib/write_agent.py)."""
+    local = _run(["git", "rev-parse", "--verify", "--quiet", branch_name], repo_root, check=False)
+    if local.returncode == 0:
+        return True
+    remote = _run(["git", "ls-remote", "--exit-code", "--heads", "origin", branch_name], repo_root, check=False)
+    return remote.returncode == 0
+
+
+def _unique_branch_name(repo_root: Path, base_name: str) -> str:
+    """Desambigua base_name con -2/-3/... si ya existe -- mismo patron que
+    lib/write_agent.py::_next_slug_id usa para ids de tipos 'nombrados', nunca
+    pisa una rama existente."""
+    if not _branch_exists(repo_root, base_name):
+        return base_name
+    n = 2
+    while _branch_exists(repo_root, f"{base_name}-{n}"):
+        n += 1
+    return f"{base_name}-{n}"
+
+
 def _remote_url(repo_root: Path) -> str | None:
     out = _run(["git", "remote", "get-url", "origin"], repo_root, check=False)
     return out.stdout.strip() if out.returncode == 0 and out.stdout.strip() else None
@@ -69,6 +95,7 @@ def propose(
 
     _ensure_clean_worktree(repo_root)
     base_branch = _current_branch(repo_root)
+    branch_name = _unique_branch_name(repo_root, branch_name)
 
     # 'no-op' si el contenido propuesto es identico al que ya hay en HEAD.
     unchanged = True

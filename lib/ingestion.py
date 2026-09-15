@@ -56,7 +56,7 @@ from jsonschema import Draft7Validator  # noqa: E402
 
 from lib.index import build_index  # noqa: E402
 from lib.config import find_config_path as _find_config_path  # noqa: E402
-from lib.write_agent import WriteAgentError, propose_new_entry, propose_update as _propose_update  # noqa: E402
+from lib.write_agent import WriteAgentError, build_new_entry, build_update_entry, submit_batch  # noqa: E402
 
 CANDIDATE_ENTRY_TYPES = ("decision", "requirement", "risk")
 
@@ -437,6 +437,18 @@ def run_pipeline(
     threshold = noise_threshold if noise_threshold is not None else _load_noise_threshold(knowledge_dir)
     index = build_index(knowledge_dir)
 
+    # docs/adr/0028: en vez de proponer cada candidato apenas se clasifica (una rama/PR
+    # por candidato), esta corrida se redacta entera primero -- build_new_entry/
+    # build_update_entry validan y arman el contenido sin tocar git -- y se somete al
+    # final como UN SOLO lote (submit_batch), en una unica rama de integracion y un
+    # unico PR con el resumen completo de todo lo que trae este documento/captura.
+    # 'reserved_ids' evita que dos candidatos nuevos del mismo entry_type (ej. dos
+    # riesgos) calculen el mismo proximo id -- ninguno de los dos esta todavia escrito
+    # a disco mientras se arma el lote, a diferencia de antes donde cada propose_new_entry
+    # tocaba git de inmediato uno por uno.
+    built_entries: list[dict[str, Any]] = []
+    reserved_ids: set[str] = set()
+
     for candidate in destilled_output.get("candidates") or []:
         title = candidate.get("title", "(sin titulo)")
 
@@ -468,24 +480,44 @@ def run_pipeline(
         if classification["action"] == "contradiction":
             update_payload = _candidate_to_contradiction_payload(candidate, requested_by, capture.get("locator"))
             try:
-                receipt = _propose_update(repo_root, knowledge_dir, classification["matched_id"], update_payload)
+                built = build_update_entry(repo_root, knowledge_dir, classification["matched_id"], update_payload)
             except WriteAgentError as exc:
                 result["rejected_invalid"].append({"title": title, "errors": [str(exc)]})
                 continue
-            receipt["candidate_title"] = title
-            receipt["dedup"] = classification
-            result["proposed"].append(receipt)
+            built["candidate_title"] = title
+            built["dedup"] = classification
+            built_entries.append(built)
             continue
 
         payload = _candidate_to_new_payload(candidate, requested_by, capture.get("locator"))
         try:
-            receipt = propose_new_entry(repo_root, knowledge_dir, candidate["entry_type"], payload)
+            built = build_new_entry(repo_root, knowledge_dir, candidate["entry_type"], payload, reserved_ids=reserved_ids)
         except WriteAgentError as exc:
             result["rejected_invalid"].append({"title": title, "errors": [str(exc)]})
             continue
-        receipt["candidate_title"] = title
-        receipt["dedup"] = classification
-        result["proposed"].append(receipt)
+        reserved_ids.add(built["entry_id"])
+        built["candidate_title"] = title
+        built["dedup"] = classification
+        built_entries.append(built)
+
+    if built_entries:
+        batch_id = capture.get("capture_id") or "captura"
+        try:
+            batch_receipt = submit_batch(repo_root, batch_id, capture.get("locator"), built_entries)
+        except WriteAgentError as exc:
+            # someter el lote entero fallo (git/gh) -- se reporta como un unico rechazo
+            # del batch completo, nunca a mitad de una propuesta (principio 4).
+            result["rejected_invalid"].append({"title": f"lote completo ({batch_id})", "errors": [str(exc)]})
+        else:
+            shared_fields = {k: v for k, v in batch_receipt.items() if k != "entries"}
+            for built in built_entries:
+                result["proposed"].append({
+                    **shared_fields,
+                    "id": built["entry_id"],
+                    "file": built["rel_path"],
+                    "candidate_title": built["candidate_title"],
+                    "dedup": built["dedup"],
+                })
 
     result["status"] = "ok"
     return result

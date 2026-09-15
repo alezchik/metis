@@ -127,6 +127,7 @@ def main() -> int:
 
         # --- pipeline completo contra la reunion real (criterio de salida de Fase 3) ---
         destilled = json.loads((FIXTURES_DIR / "2026-09-08-kickoff.candidates.json").read_text(encoding="utf-8"))
+        branches_before_first_run = _branch_count(repo_root)
         result = ingestion.run_pipeline(repo_root, knowledge_dir, capture, destilled, requested_by="metis-ingestion:meeting_file")
 
         check("el pipeline contra una reunion real termina en status=ok", result["status"] == "ok")
@@ -142,6 +143,29 @@ def main() -> int:
         check(
             "cada propuesta degrada a committed_locally (sin remote configurado)",
             all(r["status"] == "committed_locally" for r in result["proposed"]),
+        )
+
+        # --- docs/adr/0028: un solo PR por documento, no un PR suelto por cada entrada ---
+        check(
+            "las tres propuestas de la MISMA reunion comparten una unica rama de integracion",
+            len({r["branch"] for r in result["proposed"]}) == 1,
+        )
+        check(
+            "las tres propuestas comparten el mismo commit (un solo commit para todo el lote)",
+            len({r["commit_sha"] for r in result["proposed"]}) == 1,
+        )
+        check(
+            "la rama de integracion se llama metis/ingest-<capture_id>, no metis/<entry_id>",
+            result["proposed"][0]["branch"] == "metis/ingest-2026-09-08-kickoff",
+        )
+        check(
+            "una reunion con tres entradas nuevas crea una sola rama nueva, no tres",
+            _branch_count(repo_root) == branches_before_first_run + 1,
+        )
+        batch_commit_msg = _run(["git", "log", "-1", "--format=%B", result["proposed"][0]["branch"]], repo_root).stdout
+        check(
+            "el commit del lote menciona las tres entradas propuestas",
+            all(entry_id in batch_commit_msg for entry_id in (r["id"] for r in result["proposed"])),
         )
 
         for receipt in result["proposed"]:
@@ -342,6 +366,7 @@ def main() -> int:
             "Decision ya confirmada por un humano (simula el resultado de la escritura conversacional de Fase 2).\n",
             encoding="utf-8",
         )
+        seed_confirmed_text = seed_confirmed.read_text(encoding="utf-8")
         _run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "add", "-A"], repo_root_b)
         _run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "seed DEC-0001 confirmed"], repo_root_b)
 
@@ -368,6 +393,38 @@ def main() -> int:
         result8 = ingestion.run_pipeline(repo_root_b, knowledge_dir_b, followup_capture, followup_bad_target, requested_by="metis-ingestion:meeting_file")
         check("contradicts_id que no resuelve a una entrada confirmed real no se actua como contradiccion", all(r.get("dedup", {}).get("action") != "contradiction" for r in result8["proposed"]))
         check("queda registrada una nota explicita sobre el contradicts_id invalido (nunca en silencio)", len(result8["notes"]) == 1 and "DEC-9999" in result8["notes"][0])
+
+        # --- docs/adr/0028: una contradiccion y una entrada nueva que salen del MISMO
+        # documento van al MISMO PR (no uno para la actualizacion y otro para la entrada
+        # nueva) ---
+        repo_root_c = tmp_dir / "cliente-descartable-batch-mixto"
+        _run([str(REPO_ROOT / "scripts" / "contextbase-install.sh"), str(repo_root_c)], REPO_ROOT)
+        _run(["git", "init", "-q"], repo_root_c)
+        _run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "add", "-A"], repo_root_c)
+        _run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "scaffold inicial"], repo_root_c)
+        knowledge_dir_c = repo_root_c / "knowledge"
+
+        seed_confirmed_c = knowledge_dir_c / "decisions" / "0001-postgres.md"
+        seed_confirmed_c.write_text(seed_confirmed_text, encoding="utf-8")
+        _run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "add", "-A"], repo_root_c)
+        _run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "seed DEC-0001 confirmed"], repo_root_c)
+
+        mixed_batch = json.loads(json.dumps(followup_destilled))
+        mixed_batch["candidates"].append({
+            "entry_type": "risk",
+            "title": "Riesgo nuevo detectado en la misma reunion de seguimiento",
+            "confidence": "FACT",
+            "severity": "medium",
+            "evidence": [{"source": "meeting", "ref": "fixtures/ingestion/2026-09-22-followup.raw.txt", "locator": "n/a"}],
+        })
+        result_mixed = ingestion.run_pipeline(repo_root_c, knowledge_dir_c, followup_capture, mixed_batch, requested_by="metis-ingestion:meeting_file")
+        check("un documento con una contradiccion + una entrada nueva produce 2 propuestas", result_mixed["status"] == "ok" and len(result_mixed["proposed"]) == 2)
+        actions_mixed = sorted(r["dedup"]["action"] for r in result_mixed["proposed"])
+        check("una de las dos es la contradiccion (DEC-0001) y la otra es una entrada nueva", actions_mixed == ["contradiction", "new"])
+        check(
+            "la contradiccion y la entrada nueva del mismo documento van al MISMO branch/PR",
+            len({r["branch"] for r in result_mixed["proposed"]}) == 1 and len({r["commit_sha"] for r in result_mixed["proposed"]}) == 1,
+        )
 
         # --- propose_new_entry: tipo no soportado se rechaza antes de tocar git --
         # "meeting" es el ejemplo correcto: tiene schema y se indexa, pero deliberadamente

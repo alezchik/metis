@@ -203,6 +203,21 @@ contador) y, solo para `glossary-term`, `evidence`/`confidence` opcionales (asi 
 propio schema desde `docs/adr/0001`). `meeting` sigue siendo el unico tipo que no se propone
 "en frio" -- se propone via el pipeline de ingesta, por diseño.
 
+## Resuelto: un PR por documento fuente en la ingesta, no uno por candidato (`docs/adr/0028`)
+
+Augusto pidio que todas las entradas de Context Base que salgan de un mismo archivo/captura
+vayan a una sola rama de integracion y un unico PR con el resumen completo -- antes, cada
+`decision`/`requirement`/`risk` que sobrevivia dedup/match en `lib/ingestion.py::run_pipeline`
+abria su propia rama/PR, asi que una reunion con tres decisiones terminaba en tres PRs sueltos.
+`docs/adr/0028` separa "redactar una entrada" (`lib/write_agent.py::build_new_entry`/
+`build_update_entry`, sin tocar git) de "someterla" (`_submit` para una sola entrada -- la
+propuesta conversacional de Fase 2 sigue igual --, `submit_batch` para varias de una misma
+fuente). `run_pipeline` arma todo el lote primero y lo somete una sola vez al final, en una
+rama `metis/ingest-<capture_id>` con un PR que lista cada entrada propuesta. De paso corrige
+una colision de ids latente (dos candidatos nuevos del mismo tipo en un mismo documento
+calculaban el mismo siguiente id, `reserved_ids` en `_next_id`/`_next_slug_id`) y le suma a
+`adapters/git_provider.py::propose()` una desambiguacion de nombre de rama si ya existe.
+
 ## Proximo hito: un piloto real
 
 Todo lo de arriba se valido contra `fixtures/` -- un Context Base de mentira, una

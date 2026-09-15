@@ -12,7 +12,11 @@ propose(repo_root, branch_name, files, commit_message, pr_title, pr_body) -> Rec
 
 - `repo_root`: carpeta con un `.git` (el checkout de Context Base).
 - `branch_name`: nombre de rama nueva, derivado del id de la entrada (ej.
-  `metis/DEC-0005`).
+  `metis/DEC-0005`) o, para una propuesta en lote (`docs/adr/0028`), de la fuente
+  compartida (ej. `metis/ingest-2026-09-08-kickoff`). Si ya existe (local o
+  remota -- puede pasar si se reintenta una fuente cuyo capture_id se repite), esta
+  funcion lo desambigua sola agregando `-2`/`-3`/... antes de crearla, nunca falla
+  ni pisa la rama existente.
 - `files`: `{ruta relativa al repo: contenido completo}` -- todo lo que hay que
   escribir/sobreescribir para esta propuesta.
 - `commit_message`, `pr_title`, `pr_body`: texto ya armado por el Write Agent (cita

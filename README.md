@@ -277,8 +277,12 @@ clasificados `FACT`/`INFERENCE` (nunca `UNKNOWN`, que se registra aparte como
 `schemas/ingestion-candidate.schema.json`, filtra por el umbral de ruido
 (`.contextbase/config.yaml: ingestion.confidence_threshold`), hace dedup/match contra
 el indice (evita re-proponer lo mismo dos veces -- ver alcance exacto en
-`docs/adr/0008`), y propone lo que sobrevive via `lib/write_agent.propose_new_entry`
-(la misma via de PR de Fase 2, sin operaciones nuevas). Toda entrada que sale de
+`docs/adr/0008`), y redacta/valida lo que sobrevive via `lib/write_agent.build_new_entry`/
+`build_update_entry` -- sin tocar git todavia. Al final de la corrida, TODO lo que se
+redacto se somete de una sola vez con `lib/write_agent.submit_batch`: una unica rama
+de integracion (`metis/ingest-<capture_id>`) y un unico PR con el resumen completo de
+cada entrada, en vez de un PR suelto por `decision`/`requirement`/`risk` (docs/adr/0028
+-- antes de esto, cada candidato abria su propio PR). Toda entrada que sale de
 ingesta queda `status: proposed`, nunca `confirmed` -- ver `docs/adr/0008`.
 
 **Seguridad (seccion 7):** si el texto crudo de una captura tiene forma de

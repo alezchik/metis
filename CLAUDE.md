@@ -126,6 +126,27 @@ construccion de Fase 0-5.
   completo, mismo tipo de riesgo que ya se evaluo para Notion (`docs/adr/0012`/
   `0013`).
 
+- **`lib/write_agent.py` separa "redactar" de "someter a git" (`docs/adr/0028`).**
+  `build_new_entry`/`build_update_entry` hacen todo el trabajo de payload-a-texto
+  (id, frontmatter, validacion contra schema) y NUNCA tocan git -- devuelven un dict
+  "preparado". `_submit` somete UNA entrada preparada (rama `metis/<id>`, usada por
+  `propose_new_entry`/`propose_update`, la propuesta conversacional de Fase 2).
+  `submit_batch` somete VARIAS entradas preparadas de una misma fuente en una sola
+  rama `metis/ingest-<batch_id>` y un unico PR (usada por
+  `lib/ingestion.py::run_pipeline`). Si agregas un tipo de entrada nuevo o cambias el
+  payload de uno existente, el lugar correcto es `build_new_entry`/`build_update_entry`
+  -- nunca reintroduzcas logica de redaccion dentro de `_submit`/`submit_batch`, que
+  son puramente "lo que ya esta preparado, a git".
+- **Dentro de un mismo lote de ingesta, `reserved_ids` evita ids duplicados entre
+  candidatos del mismo `entry_type`.** `lib/ingestion.py::run_pipeline` arma TODA la
+  corrida antes de tocar git (`docs/adr/0028`) -- si dos candidatos nuevos son, por
+  ejemplo, dos `risk` distintos, ninguno de los dos existe todavia en `knowledge_dir`
+  cuando se calcula su id (`_next_id`/`_next_slug_id` en `lib/write_agent.py`), asi
+  que sin `reserved_ids` los dos calcularian el mismo siguiente numero. Si agregas un
+  camino nuevo que arme varias entradas del mismo tipo antes de someterlas, pasa y
+  actualiza el mismo set, no asumas que `knowledge_dir` en disco ya refleja lo que
+  vas armando en memoria.
+
 ## Correr los tests
 
 ```bash

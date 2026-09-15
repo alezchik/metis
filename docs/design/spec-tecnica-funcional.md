@@ -423,10 +423,16 @@ algo ya dicho? Sin este paso, la ingesta continua generaría un PR por cada menc
 — el mismo problema que Dédalo evita con `built_from`/staleness para no re-detectar findings ya
 reconciliados.
 
-**Propuesta.** Solo lo que pasa dedup/match se convierte en PR. Cada PR trae, en su descripción, la
-clasificación de confianza, el locator de la fuente cruda, y — si aplica — qué entrada existente
-actualiza o reemplaza. Un humano revisa y mergea (o descarta) exactamente como ya revisa PRs de código
-todos los días — no hay una UI de revisión nueva que aprender.
+**Propuesta.** Solo lo que pasa dedup/match se convierte en PR. *(Actualización, `docs/adr/0028`: un
+único PR por documento/captura fuente, no uno por candidato — todas las entradas que salen de la misma
+reunión/documento se redactan primero y se someten juntas en una sola rama de integración, con un
+único commit y un único PR que las lista todas. Antes de esto, cada `decision`/`requirement`/`risk`
+que sobrevivía dedup/match abría su propia rama y su propio PR — revisar una reunión con tres
+decisiones significaba revisar tres PRs sueltos, sin ningún lugar que las mostrara juntas.)* Cada PR
+trae, en su descripción, la clasificación de confianza de cada entrada, el locator de la fuente cruda
+(citado una sola vez para todo el lote), y — si aplica — qué entrada existente actualiza o reemplaza.
+Un humano revisa y mergea (o descarta) exactamente como ya revisa PRs de código todos los días — no
+hay una UI de revisión nueva que aprender.
 
 **Umbral de ruido.** La ingesta no propone cualquier cosa: solo entradas por encima de un umbral de
 confianza + relevancia configurable (`.contextbase/config.yaml`). Es preferible perder una entrada

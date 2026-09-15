@@ -124,7 +124,14 @@ def _find_entry_file(knowledge_dir: Path, entry_id: str) -> tuple[Path, dict, st
     return None
 
 
-def _next_id(knowledge_dir: Path, entry_type: str) -> str:
+def _next_id(knowledge_dir: Path, entry_type: str, reserved_ids: set[str] | None = None) -> str:
+    """'reserved_ids' (docs/adr/0028): ids ya asignados a OTRAS entradas de un mismo
+    lote que todavia no se escribieron a disco (build_new_entry no toca git -- eso lo
+    hace submit_batch/_submit despues, ver mas abajo). Sin esto, dos candidatos del
+    mismo entry_type que salen de un mismo documento calcularian el mismo siguiente id
+    (los dos leen el mismo knowledge_dir en disco, todavia sin ninguno de los dos
+    escrito) -- lib/ingestion.py::run_pipeline es quien arma este set a medida que
+    arma el lote."""
     prefix = ID_PREFIXES[entry_type]
     pattern = ID_PATTERNS[entry_type]
     subdir = knowledge_dir / TYPE_SUBDIR[entry_type]
@@ -134,15 +141,19 @@ def _next_id(knowledge_dir: Path, entry_type: str) -> str:
             match = pattern.match(str(extract_frontmatter(path).get("id", "")))
             if match:
                 max_n = max(max_n, int(match.group(1)))
+    for reserved in reserved_ids or ():
+        match = pattern.match(reserved)
+        if match:
+            max_n = max(max_n, int(match.group(1)))
     return f"{prefix}-{max_n + 1:04d}"
 
 
-def _next_slug_id(knowledge_dir: Path, entry_type: str, name: str) -> str:
+def _next_slug_id(knowledge_dir: Path, entry_type: str, name: str, reserved_ids: set[str] | None = None) -> str:
     """Id para tipos 'nombrados' (system/glossary-term): PREFIJO-slug(nombre), no un
     contador secuencial -- son entidades con nombre propio, no una cola de
     propuestas (a diferencia de decision/requirement/risk, ver _next_id). Si el slug
     ya existe, se desambigua agregando -2, -3, ... -- nunca pisa una entrada
-    existente."""
+    existente. 'reserved_ids': ver _next_id -- mismo motivo (docs/adr/0028)."""
     prefix = ID_PREFIXES[entry_type]
     base_slug = _slug(name)
     subdir = knowledge_dir / TYPE_SUBDIR[entry_type]
@@ -152,6 +163,7 @@ def _next_slug_id(knowledge_dir: Path, entry_type: str, name: str) -> str:
             existing_id = extract_frontmatter(path).get("id")
             if existing_id:
                 existing_ids.add(existing_id)
+    existing_ids |= set(reserved_ids or ())
     candidate = f"{prefix}-{base_slug}"
     if candidate not in existing_ids:
         return candidate
@@ -161,19 +173,29 @@ def _next_slug_id(knowledge_dir: Path, entry_type: str, name: str) -> str:
     return f"{candidate}-{n}"
 
 
-def propose_new_entry(
-    repo_root: str | Path, knowledge_dir: str | Path, entry_type: str, payload: dict[str, Any]
+def build_new_entry(
+    repo_root: str | Path,
+    knowledge_dir: str | Path,
+    entry_type: str,
+    payload: dict[str, Any],
+    reserved_ids: set[str] | None = None,
 ) -> dict[str, Any]:
-    """Registra una entrada nueva de cualquiera de los tres tipos que se proponen "en frio"
-    (decision/requirement/risk -- system/meeting/glossary-term no tienen todavia un flujo de
-    propuesta conversacional, seccion 8.1). Generaliza lo que hasta Fase 2 vivia solo en
-    propose_decision, para que Fase 3 (lib/ingestion.py) pueda proponer requirements/risks
-    detectados durante la ingesta sin duplicar esta logica ni agregar nuevas operaciones MCP.
+    """Redacta y valida una entrada nueva -- MISMA logica de payload/validacion que antes
+    vivia inline en propose_new_entry, separada de _submit (docs/adr/0028) para que quien
+    orquesta varias entradas de una misma fuente (lib/ingestion.py::run_pipeline) pueda
+    prepararlas TODAS antes de tocar git una sola vez via submit_batch, en vez de abrir
+    una rama/PR por entrada. Nunca toca git -- devuelve un dict "preparado":
+      {"kind": "new", "entry_id", "rel_path", "text", "status", "requested_by",
+       "context_ref", "title", "extra_pr_lines": []}
+    propose_new_entry (mas abajo) es ahora un wrapper de una sola linea sobre esto + _submit,
+    para la propuesta conversacional de una entrada suelta (Fase 2) -- sigue abriendo su
+    propia rama/PR de inmediato, eso no cambio.
 
-    payload comun a los tres tipos:
-      title (obl.), evidence (obl., lista, minimo 1), confidence (obl.),
-      requested_by (obl. -- quien le pidio esto al asistente),
-      status, tags, date, body, context_ref (todos opcionales).
+    payload comun a los tres tipos "con contador" (decision/requirement/risk) mas
+    system/glossary-term:
+      title (obl., 'term' en glossary-term), evidence (obl. salvo glossary-term, lista,
+      minimo 1), confidence (obl. salvo glossary-term), requested_by (obl. -- quien le
+      pidio esto al asistente), status, tags, date, body, context_ref (todos opcionales).
     payload especifico de decision:
       decided_by (opcional -- si viene, status default 'confirmed'; si no, 'proposed'),
       supersedes (opcional).
@@ -213,9 +235,9 @@ def propose_new_entry(
         raise WriteAgentError("falta 'requested_by' -- quien le pidio esto al asistente, para citarlo en el PR (seccion 5.2)")
 
     entry_id = (
-        _next_slug_id(knowledge_dir, entry_type, name)
+        _next_slug_id(knowledge_dir, entry_type, name, reserved_ids=reserved_ids)
         if entry_type in SLUG_ID_TYPES
-        else _next_id(knowledge_dir, entry_type)
+        else _next_id(knowledge_dir, entry_type, reserved_ids=reserved_ids)
     )
     frontmatter: dict[str, Any] = {
         "id": entry_id,
@@ -285,9 +307,36 @@ def propose_new_entry(
     # (SYS-reporting-service-reporting-service.md).
     filename = f"{_slug(name)}.md" if entry_type in SLUG_ID_TYPES else f"{entry_id}-{_slug(name)}.md"
     rel_path = str(knowledge_rel / TYPE_SUBDIR[entry_type] / filename)
+    return {
+        "kind": "new",
+        "entry_id": entry_id,
+        "rel_path": rel_path,
+        "text": text,
+        "status": frontmatter["status"],
+        "requested_by": requested_by,
+        "context_ref": payload.get("context_ref"),
+        "title": name,
+        "extra_pr_lines": [],
+    }
+
+
+def propose_new_entry(
+    repo_root: str | Path, knowledge_dir: str | Path, entry_type: str, payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Registra una entrada nueva de cualquiera de los tres tipos que se proponen "en frio"
+    (decision/requirement/risk -- system/meeting/glossary-term no tienen todavia un flujo de
+    propuesta conversacional, seccion 8.1). Generaliza lo que hasta Fase 2 vivia solo en
+    propose_decision, para que Fase 3 (lib/ingestion.py) pueda proponer requirements/risks
+    detectados durante la ingesta sin duplicar esta logica ni agregar nuevas operaciones MCP.
+
+    Abre su propia rama/PR de inmediato (una entrada, una propuesta) -- para agrupar varias
+    entradas de una misma fuente en un unico PR (docs/adr/0028), usar build_new_entry +
+    submit_batch en su lugar (asi es como lo hace lib/ingestion.py::run_pipeline). Ver
+    build_new_entry para el detalle completo del payload por tipo."""
+    built = build_new_entry(repo_root, knowledge_dir, entry_type, payload)
     return _submit(
-        repo_root, entry_id, rel_path, text, requested_by, payload.get("context_ref"),
-        frontmatter["status"], extra_pr_lines=[],
+        Path(repo_root).resolve(), built["entry_id"], built["rel_path"], built["text"],
+        built["requested_by"], built["context_ref"], built["status"], extra_pr_lines=[],
     )
 
 
@@ -298,15 +347,20 @@ def propose_decision(repo_root: str | Path, knowledge_dir: str | Path, payload: 
     return propose_new_entry(repo_root, knowledge_dir, "decision", payload)
 
 
-def propose_update(repo_root: str | Path, knowledge_dir: str | Path, entry_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """Actualiza una entrada existente (de cualquier tipo). payload:
+def build_update_entry(repo_root: str | Path, knowledge_dir: str | Path, entry_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Redacta y valida una actualizacion sobre una entrada existente -- misma logica que
+    antes vivia inline en propose_update, separada de _submit (docs/adr/0028) por el mismo
+    motivo que build_new_entry: para que lib/ingestion.py::run_pipeline pueda preparar una
+    contradiccion (Fase 4) junto con las entradas nuevas del mismo documento y mandarlas
+    todas juntas a submit_batch, en vez de abrir su propio PR aparte. payload:
       patch (obl. -- dict de campos a cambiar, ej. {"status": "superseded",
         "superseded_by": "DEC-0005"} o {"resolution": "out_of_scope"}),
       reason (obl. -- por que), requested_by (obl.), context_ref (opcional).
     Si patch incluye 'status', la transicion se valida contra
     schemas/entry-state-machine.json -- una transicion no declarada se rechaza antes
-    de tocar git.
-    """
+    de tocar git. Nunca toca git -- devuelve el mismo dict "preparado" que build_new_entry
+    (con "kind": "update" y branch_suffix="-update" para cuando se somete sola via
+    propose_update)."""
     knowledge_dir = Path(knowledge_dir).resolve()
     repo_root = Path(repo_root).resolve()
 
@@ -350,10 +404,31 @@ def propose_update(repo_root: str | Path, knowledge_dir: str | Path, entry_id: s
         raise WriteAgentError(f"la entrada actualizada no valida contra {entry_type}.schema.json:\n" + "\n".join(errors))
 
     rel_path = str(path.relative_to(repo_root))
+    name_field = NAME_FIELD.get(entry_type, "title")
+    return {
+        "kind": "update",
+        "entry_id": entry_id,
+        "rel_path": rel_path,
+        "text": text,
+        "status": new_status,
+        "requested_by": requested_by,
+        "context_ref": payload.get("context_ref"),
+        "title": frontmatter.get(name_field),
+        "extra_pr_lines": [f"**Razon:** {reason}", f"**Cambios:** {patch}"],
+        "branch_suffix": "-update",
+    }
+
+
+def propose_update(repo_root: str | Path, knowledge_dir: str | Path, entry_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Actualiza una entrada existente (de cualquier tipo), abriendo su propia rama/PR de
+    inmediato. Ver build_update_entry para el detalle completo del payload y para el camino
+    que usa lib/ingestion.py cuando la actualizacion viene acompañada de otras entradas de la
+    misma fuente (docs/adr/0028)."""
+    built = build_update_entry(repo_root, knowledge_dir, entry_id, payload)
     return _submit(
-        repo_root, entry_id, rel_path, text, requested_by, payload.get("context_ref"),
-        new_status, extra_pr_lines=[f"**Razon:** {reason}", f"**Cambios:** {patch}"],
-        branch_suffix="-update",
+        Path(repo_root).resolve(), built["entry_id"], built["rel_path"], built["text"],
+        built["requested_by"], built["context_ref"], built["status"],
+        extra_pr_lines=built["extra_pr_lines"], branch_suffix=built["branch_suffix"],
     )
 
 
@@ -391,4 +466,83 @@ def _submit(
 
     receipt["id"] = entry_id
     receipt["file"] = rel_path
+    return receipt
+
+
+def submit_batch(
+    repo_root: str | Path,
+    batch_id: str,
+    source_locator: str | None,
+    built_entries: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Agrupa una o mas entradas ya preparadas (build_new_entry/build_update_entry) que
+    provienen de UNA MISMA fuente -- un documento o una captura de ingesta -- en una sola
+    rama de integracion y un unico PR con el resumen completo de todo lo que trae
+    (docs/adr/0028). Antes de esto, lib/ingestion.py::run_pipeline llamaba a
+    propose_new_entry/propose_update una vez por candidato, y cada uno abria su propia
+    rama/PR -- una reunion con tres decisiones terminaba en tres PRs sueltos para revisar
+    por separado, en vez de uno solo con las tres.
+
+    'batch_id' identifica la fuente (tipicamente el capture_id) y se usa para nombrar la
+    rama (metis/ingest-<batch_id>) -- si ya existe (ver adapters/git_provider.py), se
+    desambigua sola, nunca falla ni pisa una rama existente. 'source_locator' (opcional)
+    es la cita de donde salieron todas las entradas juntas y aparece una sola vez en el PR,
+    en vez de repetirse en cada una (a diferencia de context_ref en la propuesta individual,
+    que se repite porque cada PR viejo citaba su propia fuente por separado).
+
+    Nunca se llama con una lista vacia -- quien orquesta decide si hay algo para proponer
+    antes de llamar aca (si un documento entero se filtra por duplicado/ruido/invalido, no
+    se crea ninguna rama, ni siquiera una vacia)."""
+    if not built_entries:
+        raise WriteAgentError("submit_batch necesita al menos una entrada preparada -- no se llama con una lista vacia")
+
+    repo_root = Path(repo_root).resolve()
+    branch_name = f"metis/ingest-{_slug(batch_id)}"
+    files = {entry["rel_path"]: entry["text"] for entry in built_entries}
+
+    commit_lines = [f"Metis: proponer {len(built_entries)} entrada(s) desde {batch_id}", ""]
+    for entry in built_entries:
+        verb = "actualizar" if entry["kind"] == "update" else "crear"
+        title_suffix = f": {entry['title']}" if entry.get("title") else ""
+        commit_lines.append(f"- {verb} {entry['entry_id']}{title_suffix}")
+    if source_locator:
+        commit_lines += ["", f"Fuente: {source_locator}"]
+    requested_by = built_entries[0].get("requested_by") or "metis-ingestion"
+    commit_lines += ["", f"Pedido por: {requested_by}"]
+    commit_message = "\n".join(commit_lines)
+
+    entry_count = len(built_entries)
+    pr_title = f"[Metis] Ingesta: {batch_id} ({entry_count} entrada{'s' if entry_count != 1 else ''})"
+    pr_body_lines = [
+        "Propuesta automatica del pipeline de ingesta de Metis.",
+        "",
+        "Una unica rama/PR por documento fuente (docs/adr/0028): todas las entradas de",
+        "abajo salieron de la misma captura -- revisalas juntas.",
+        "",
+        f"**Fuente:** {source_locator or batch_id}",
+        f"**Pedido por:** {requested_by}",
+        "",
+        f"**Entradas propuestas ({entry_count}):**",
+        "",
+    ]
+    for entry in built_entries:
+        line = f"- `{entry['entry_id']}`"
+        if entry.get("title"):
+            line += f" -- {entry['title']}"
+        line += f" (status propuesto: {entry['status']})"
+        pr_body_lines.append(line)
+        for extra in entry.get("extra_pr_lines") or []:
+            pr_body_lines.append(f"  - {extra}")
+    pr_body_lines += ["", "Revisar la evidencia citada de cada entrada antes de aprobar. Esto nunca se mergea solo."]
+    pr_body = "\n".join(pr_body_lines)
+
+    try:
+        receipt = git_propose(repo_root, branch_name, files, commit_message, pr_title, pr_body)
+    except GitProviderError as exc:
+        raise WriteAgentError(str(exc)) from exc
+
+    receipt["entries"] = [
+        {"id": entry["entry_id"], "file": entry["rel_path"], "kind": entry["kind"]}
+        for entry in built_entries
+    ]
     return receipt
